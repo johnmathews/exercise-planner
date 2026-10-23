@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.git
+.github
+.worktrees
+.engineering-team
+.playwright-mcp
+docs
+journal
+design_handoff_exercise_planner
+*.zip
