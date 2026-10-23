@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   defaultExercises,
   defaultFoods,
+  normaliseWeight,
   parseDietData,
   parsePlannerData,
   parseSettings,
@@ -84,6 +85,32 @@ describe('parsePlannerData', () => {
     expect(parsed.log).toEqual({
       '2026-10-19': { a: [true, false, false, false, false, false, false] },
     })
+  })
+})
+
+describe('exercise weight', () => {
+  it('keeps a valid weight and drops a missing, zero or invalid one', () => {
+    const data = parsePlannerData(
+      JSON.stringify({
+        exercises: [
+          { id: 'a', name: 'A', reps: 15, weight: 12, target: 3 },
+          { id: 'b', name: 'B', reps: 15, weight: 0, target: 3 },
+          { id: 'c', name: 'C', reps: 15, weight: '12', target: 3 },
+          { id: 'd', name: 'D', reps: 15, target: 3 },
+        ],
+        log: {},
+      }),
+    )
+    expect(data.exercises.map((e) => e.weight)).toEqual([12, undefined, undefined, undefined])
+    expect(data.exercises.slice(1).every((e) => !('weight' in e))).toBe(true)
+  })
+
+  it('rounds to two decimals and caps at 500 kg', () => {
+    expect(normaliseWeight(2.505)).toBe(2.51)
+    expect(normaliseWeight(9000)).toBe(500)
+    expect(normaliseWeight(-1)).toBeUndefined()
+    expect(normaliseWeight(0.004)).toBeUndefined()
+    expect(normaliseWeight(Number.NaN)).toBeUndefined()
   })
 })
 

@@ -10,6 +10,7 @@ import {
   NEW_EXERCISE_TARGET,
   SETTINGS_KEY,
   clamp,
+  normaliseWeight,
   parsePlannerData,
   parseSettings,
   readKey,
@@ -22,11 +23,23 @@ import type { Theme } from '@/lib/theme'
 
 export type Day = { name: string; date: string; key: string; isToday: boolean }
 
-export type NewExercise = { name: string; reps: number; perSide: boolean }
+export type NewExercise = { name: string; reps: number; perSide: boolean; weight?: number }
 
-export function repsLabel(e: Exercise): string {
-  if (!e.reps) return '—'
-  return e.perSide ? `${e.reps} each side / set` : `${e.reps} reps / set`
+/** The chips under an exercise name, e.g. ["15 reps / set", "12 kg"]; "—" when it has neither. */
+export function exerciseDetails(e: Exercise): string[] {
+  const chips: string[] = []
+  if (e.reps) chips.push(e.perSide ? `${e.reps} each side / set` : `${e.reps} reps / set`)
+  if (e.weight) chips.push(`${e.weight} kg`)
+  return chips.length ? chips : ['—']
+}
+
+/** Cleans form input into the stored fields; null when the trimmed name is empty. */
+function exerciseFields(input: NewExercise): Omit<Exercise, 'id' | 'target'> | null {
+  const name = input.name.trim()
+  if (!name) return null
+  const reps = Number.isFinite(input.reps) && input.reps > 0 ? Math.floor(input.reps) : 0
+  const weight = normaliseWeight(input.weight)
+  return { name, reps, perSide: input.perSide, ...(weight !== undefined ? { weight } : {}) }
 }
 
 export const usePlannerStore = defineStore('planner', () => {
@@ -79,16 +92,19 @@ export const usePlannerStore = defineStore('planner', () => {
 
   /** Returns false (and adds nothing) when the trimmed name is empty. */
   function addExercise(input: NewExercise): boolean {
-    const name = input.name.trim()
-    if (!name) return false
-    const reps = Number.isFinite(input.reps) && input.reps > 0 ? Math.floor(input.reps) : 0
-    exercises.value.push({
-      id: tracker.newId(),
-      name,
-      reps,
-      perSide: input.perSide,
-      target: NEW_EXERCISE_TARGET,
-    })
+    const fields = exerciseFields(input)
+    if (!fields) return false
+    exercises.value.push({ id: tracker.newId(), ...fields, target: NEW_EXERCISE_TARGET })
+    return true
+  }
+
+  /** Replaces name, reps, per-side and weight, keeping the id, goal and history. */
+  function updateExercise(id: string, input: NewExercise): boolean {
+    const fields = exerciseFields(input)
+    const i = exercises.value.findIndex((e) => e.id === id)
+    if (!fields || i === -1) return false
+    const { target } = exercises.value[i]!
+    exercises.value[i] = { id, ...fields, target }
     return true
   }
 
@@ -174,6 +190,7 @@ export const usePlannerStore = defineStore('planner', () => {
     toggle,
     changeTarget,
     addExercise,
+    updateExercise,
     removeExercise,
     prevWeek,
     nextWeek,

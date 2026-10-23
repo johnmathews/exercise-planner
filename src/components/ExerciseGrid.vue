@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { repsLabel, usePlannerStore } from '@/stores/planner'
+import { computed, ref, watch } from 'vue'
+import { exerciseDetails, usePlannerStore } from '@/stores/planner'
 import type { Exercise } from '@/lib/storage'
 import type { CountTone, Tracked } from '@/lib/tracker'
 import TrackerGrid from '@/components/TrackerGrid.vue'
+import EditExerciseDialog from '@/components/EditExerciseDialog.vue'
 
 const store = usePlannerStore()
 
@@ -21,9 +22,24 @@ function flagsFor(id: string): boolean[] {
 }
 
 // The grid hands back the item it was given, which is always an Exercise here.
-function detailFor(item: Tracked): string {
-  return repsLabel(item as Exercise)
+function detailsFor(item: Tracked): string[] {
+  return exerciseDetails(item as Exercise)
 }
+
+const editing = ref<Exercise | null>(null)
+
+function edit(id: string): void {
+  editing.value = store.exercises.find((e) => e.id === id) ?? null
+}
+
+// Another tab can delete the exercise while its dialog is open here; close it rather than leave
+// a Save that can't apply.
+watch(
+  () => store.exercises,
+  (list) => {
+    if (editing.value && !list.some((e) => e.id === editing.value!.id)) editing.value = null
+  },
+)
 </script>
 
 <template>
@@ -34,7 +50,8 @@ function detailFor(item: Tracked): string {
     :days="store.days"
     :flags-for="flagsFor"
     :total-for="store.totalFor"
-    :detail-for="detailFor"
+    :details-for="detailsFor"
+    editable
     :footer-label="`Picked / ${store.dailyPick}`"
     :counts="counts"
     :grand-total="store.grandTotal"
@@ -42,5 +59,7 @@ function detailFor(item: Tracked): string {
     @toggle="store.toggle"
     @change-target="store.changeTarget"
     @remove="store.removeExercise"
+    @edit="edit"
   />
+  <EditExerciseDialog v-if="editing" :exercise="editing" @close="editing = null" />
 </template>

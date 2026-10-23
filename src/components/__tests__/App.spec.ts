@@ -347,3 +347,117 @@ describe('theme', () => {
     expect(isDarkClass()).toBe(false)
   })
 })
+
+describe('exercise weight', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    // jsdom has no modal dialogs; stand in for showModal/close, including the close event.
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.open = true
+    }
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.open = false
+      this.dispatchEvent(new Event('close'))
+    }
+  })
+  afterEach(() => wrapper?.unmount())
+
+  function detail(name: string) {
+    const row = ex()
+      .findAll('[role="rowheader"]')
+      .find((r) => r.get('[data-testid="item-name"]').text() === name)!
+    return row
+      .findAll('[data-testid="item-detail"]')
+      .map((c) => c.text())
+      .join(' · ')
+  }
+
+  it('adds an exercise with a weight, accepting a comma decimal', async () => {
+    mountApp()
+    await wrapper.get('input[aria-label="New exercise name"]').setValue('Swings')
+    await wrapper.get('input[aria-label="Reps"]').setValue('20')
+    const weight = wrapper.get('input[aria-label="Weight in kg (optional)"]')
+    await weight.setValue('16,5kg')
+    expect((weight.element as HTMLInputElement).value).toBe('16.5')
+    await wrapper.get('form').trigger('submit')
+    expect(detail('Swings')).toBe('20 reps / set · 16.5 kg')
+    expect((weight.element as HTMLInputElement).value).toBe('')
+  })
+
+  it('edits an existing exercise in a dialog', async () => {
+    mountApp()
+    expect(wrapper.find('dialog').exists()).toBe(false)
+    await wrapper.get('button[aria-label="Edit Squats"]').trigger('click')
+    const dialog = wrapper.get('dialog')
+    expect((dialog.element as HTMLDialogElement).open).toBe(true)
+    expect((dialog.get('input[inputmode="numeric"]').element as HTMLInputElement).value).toBe('15')
+
+    await dialog.get('input[inputmode="decimal"]').setValue('12')
+    await dialog.get('form').trigger('submit')
+    expect(wrapper.find('dialog').exists()).toBe(false)
+    expect(detail('Squats')).toBe('15 reps / set · 12 kg')
+  })
+
+  it('discards changes on Cancel', async () => {
+    mountApp()
+    await wrapper.get('button[aria-label="Edit Squats"]').trigger('click')
+    const dialog = wrapper.get('dialog')
+    await dialog.get('input[inputmode="decimal"]').setValue('40')
+    await dialog
+      .findAll('button')
+      .find((b) => b.text() === 'Cancel')!
+      .trigger('click')
+    expect(wrapper.find('dialog').exists()).toBe(false)
+    expect(detail('Squats')).toBe('15 reps / set')
+  })
+
+  it('edits the name, reps and per-side count, keeping the goal', async () => {
+    mountApp()
+    await wrapper.get('button[aria-label="Edit Kettlebell halos"]').trigger('click')
+    const dialog = wrapper.get('dialog')
+    const toggle = (name: string) =>
+      dialog.findAll('button[aria-pressed]').find((b) => b.text() === name)!
+    expect(toggle('each side, per set').attributes('aria-pressed')).toBe('true')
+    await dialog.get('input:not([inputmode])').setValue('Halos')
+    await dialog.get('input[inputmode="numeric"]').setValue('1x0')
+    await toggle('per set').trigger('click')
+    await dialog.get('form').trigger('submit')
+    expect(detail('Halos')).toBe('10 reps / set')
+    expect(ex().findAll('[data-testid="row-total"]').at(-1)!.text()).toBe('0 / 3')
+  })
+
+  it('closes the dialog when another tab deletes the exercise', async () => {
+    mountApp()
+    await wrapper.get('button[aria-label="Edit Squats"]').trigger('click')
+    const store = usePlannerStore()
+    localStorage.setItem(
+      'exercise-planner-v1',
+      JSON.stringify({ exercises: store.exercises.filter((e) => e.id !== 'sq'), log: {} }),
+    )
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: 'exercise-planner-v1', storageArea: localStorage }),
+    )
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('dialog').exists()).toBe(false)
+  })
+
+  it('stays open when another tab changes a different exercise', async () => {
+    mountApp()
+    await wrapper.get('button[aria-label="Edit Squats"]').trigger('click')
+    const store = usePlannerStore()
+    localStorage.setItem(
+      'exercise-planner-v1',
+      JSON.stringify({ exercises: store.exercises.filter((e) => e.id !== 'pu'), log: {} }),
+    )
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: 'exercise-planner-v1', storageArea: localStorage }),
+    )
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('dialog').exists()).toBe(true)
+  })
+
+  it('offers no edit button for foods', () => {
+    mountApp()
+    expect(wrapper.find('button[aria-label="Edit Vegetables"]').exists()).toBe(false)
+  })
+})

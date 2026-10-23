@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
-import { repsLabel, usePlannerStore } from '@/stores/planner'
+import { exerciseDetails, usePlannerStore } from '@/stores/planner'
 import { DATA_KEY, SETTINGS_KEY } from '@/lib/storage'
 
 // Friday 23 Oct 2026: the week is Mon 19 – Sun 25 and today is index 4.
@@ -193,12 +193,70 @@ describe('planner store', () => {
   })
 })
 
-describe('repsLabel', () => {
+describe('exerciseDetails', () => {
   it('formats per set, per side and missing reps', () => {
-    expect(repsLabel({ id: 'a', name: 'A', reps: 10, target: 3 })).toBe('10 reps / set')
-    expect(repsLabel({ id: 'a', name: 'A', reps: 8, perSide: true, target: 3 })).toBe(
+    expect(exerciseDetails({ id: 'a', name: 'A', reps: 10, target: 3 })).toEqual(['10 reps / set'])
+    expect(exerciseDetails({ id: 'a', name: 'A', reps: 8, perSide: true, target: 3 })).toEqual([
       '8 each side / set',
-    )
-    expect(repsLabel({ id: 'a', name: 'A', reps: 0, target: 3 })).toBe('—')
+    ])
+    expect(exerciseDetails({ id: 'a', name: 'A', reps: 0, target: 3 })).toEqual(['—'])
+  })
+
+  it('appends the weight, or shows it alone without reps', () => {
+    expect(exerciseDetails({ id: 'a', name: 'A', reps: 15, weight: 12, target: 3 })).toEqual([
+      '15 reps / set',
+      '12 kg',
+    ])
+    expect(exerciseDetails({ id: 'a', name: 'A', reps: 0, weight: 2.5, target: 3 })).toEqual([
+      '2.5 kg',
+    ])
+  })
+})
+
+describe('updateExercise', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+    localStorage.clear()
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('replaces the fields but keeps the id, goal and history', async () => {
+    const s = usePlannerStore()
+    s.toggle('sq', 0)
+    s.changeTarget('sq', 1)
+    expect(
+      s.updateExercise('sq', { name: ' Goblet squats ', reps: 12, perSide: false, weight: 12 }),
+    ).toBe(true)
+    expect(s.exercises.find((e) => e.id === 'sq')).toEqual({
+      id: 'sq',
+      name: 'Goblet squats',
+      reps: 12,
+      perSide: false,
+      weight: 12,
+      target: 5,
+    })
+    expect(s.totalFor('sq')).toBe(1)
+    await nextTick()
+    expect(JSON.stringify(stored(DATA_KEY))).toContain('"weight":12')
+  })
+
+  it('drops the weight when cleared and rejects bad input', () => {
+    const s = usePlannerStore()
+    s.updateExercise('sq', { name: 'Squats', reps: 15, perSide: false, weight: 12 })
+    s.updateExercise('sq', { name: 'Squats', reps: 15, perSide: false })
+    expect(s.exercises.find((e) => e.id === 'sq')).not.toHaveProperty('weight')
+    expect(s.updateExercise('sq', { name: '  ', reps: 1, perSide: false })).toBe(false)
+    expect(s.updateExercise('nope', { name: 'X', reps: 1, perSide: false })).toBe(false)
+    expect(s.exercises.find((e) => e.id === 'sq')!.name).toBe('Squats')
+  })
+
+  it('stores a weight given when adding', () => {
+    const s = usePlannerStore()
+    s.addExercise({ name: 'Swings', reps: 20, perSide: false, weight: 16 })
+    expect(s.exercises.at(-1)).toMatchObject({ name: 'Swings', reps: 20, weight: 16, target: 3 })
+    s.addExercise({ name: 'Plank', reps: 0, perSide: false, weight: -4 })
+    expect(s.exercises.at(-1)).not.toHaveProperty('weight')
   })
 })
