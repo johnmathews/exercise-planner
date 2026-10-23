@@ -1,8 +1,11 @@
 import { isTheme, type Theme } from '@/lib/theme'
+import type { Plans } from '@/lib/plans'
 
 export type Exercise = {
   id: string
   name: string
+  /** Sets per session; absent when not set. */
+  sets?: number
   reps: number
   perSide?: boolean
   /** Load in kg (e.g. a 12 kg kettlebell); absent for bodyweight exercises. */
@@ -21,17 +24,24 @@ export type Food = {
 /** Week Monday `YYYY-MM-DD` → item id → done flags Mon–Sun. */
 export type Log = Record<string, Record<string, boolean[]>>
 
-export type PlannerData = { exercises: Exercise[]; log: Log }
+export type PlannerData = { plans: Plans<Exercise>; log: Log }
 
-export type DietData = { foods: Food[]; log: Log }
+export type DietData = { plans: Plans<Food>; log: Log }
 
 export type Settings = { accent: string; dailyPick: number; theme: Theme }
 
-/** Same key and shape as the design prototype, so its saved data carries over on the same origin. */
-export const DATA_KEY = 'exercise-planner-v1'
+/** Exercise plans per week plus the log: `{ plans, log }`. */
+export const DATA_KEY = 'exercise-planner-v2'
+/** Food plans per week plus the diet log. */
+export const DIET_KEY = 'exercise-planner-diet-v2'
 export const SETTINGS_KEY = 'exercise-planner-settings-v1'
-/** Diet has its own key so the exercise payload stays byte-compatible with the prototype. */
-export const DIET_KEY = 'exercise-planner-diet-v1'
+/**
+ * The earlier single-list format (`{ exercises, log }` and `{ foods, log }`; the exercise one is the
+ * design prototype's). Read to migrate when v2 data is missing or unreadable; never written or
+ * deleted.
+ */
+export const LEGACY_DATA_KEY = 'exercise-planner-v1'
+export const LEGACY_DIET_KEY = 'exercise-planner-diet-v1'
 
 export const ACCENTS = ['#0a84ff', '#30d158', '#ff9f0a', '#bf5af2'] as const
 export const MIN_TARGET = 0
@@ -40,6 +50,7 @@ export const MIN_DAILY_PICK = 1
 export const MAX_DAILY_PICK = 8
 export const NEW_EXERCISE_TARGET = 3
 export const MAX_WEIGHT = 500
+export const MAX_SETS = 20
 export const NEW_FOOD_TARGET = 3
 
 export const DEFAULT_SETTINGS: Settings = { accent: '#30d158', dailyPick: 3, theme: 'system' }
@@ -94,13 +105,12 @@ export function normaliseWeight(v: unknown): number | undefined {
 
 function normaliseExercise(v: unknown): Exercise | null {
   if (!isRecord(v) || typeof v.id !== 'string' || typeof v.name !== 'string') return null
-  // Key order and an explicit `perSide: false` both follow the prototype, so its saved data
-  // re-serialises byte for byte and loading it never triggers a rewrite. `weight` is ours and only
-  // appears when set, so prototype data never gains one.
   const weight = normaliseWeight(v.weight)
+  const sets = toInt(v.sets, 0)
   return {
     id: v.id,
     name: v.name,
+    ...(sets > 0 ? { sets: Math.min(MAX_SETS, sets) } : {}),
     reps: Math.max(0, toInt(v.reps, 0)),
     ...(typeof v.perSide === 'boolean' ? { perSide: v.perSide } : {}),
     ...(weight !== undefined ? { weight } : {}),
@@ -132,28 +142,64 @@ function normaliseLog(v: unknown): Log {
   return log
 }
 
-/**
- * Coerce whatever is stored into a valid `PlannerData`. Each field falls back on its own, so a
- * payload with a bad `log` keeps its exercises and vice versa. The prototype trusted the stored
- * shape and crashed on a payload missing `log`.
- */
-export function parsePlannerData(raw: string | null): PlannerData {
-  const parsed = parseJson(raw)
-  if (!isRecord(parsed)) return { exercises: defaultExercises(), log: {} }
-  const exercises = Array.isArray(parsed.exercises)
-    ? parsed.exercises.map(normaliseExercise).filter((e): e is Exercise => e !== null)
-    : defaultExercises()
-  return { exercises, log: normaliseLog(parsed.log) }
+function normalisePlans<T>(v: unknown, normalise: (item: unknown) => T | null): Plans<T> {
+  const plans: Plans<T> = {}
+  if (!isRecord(v)) return plans
+  for (const [week, items] of Object.entries(v)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(week) || !Array.isArray(items)) continue
+    plans[week] = items.map(normalise).filter((it): it is T => it !== null)
+  }
+  return plans
 }
 
-/** Same field-by-field fallback as `parsePlannerData`, for the diet payload. */
-export function parseDietData(raw: string | null): DietData {
+type TrackedData<T> = { plans: Plans<T>; log: Log }
+
+/**
+ * Coerce stored data into `{ plans, log }`, each field falling back on its own. Without v2 data, a
+ * legacy single-list payload migrates: its list becomes the plan for every week it logged and for
+ * `currentWeek`, so every week looks as it did before. With neither, plans start empty and the
+ * stores show the defaults until something is changed.
+ */
+function parseTracked<T>(
+  raw: string | null,
+  legacyRaw: string | null,
+  currentWeek: string,
+  legacyListKey: 'exercises' | 'foods',
+  normalise: (item: unknown) => T | null,
+  defaults: () => T[],
+): TrackedData<T> {
   const parsed = parseJson(raw)
-  if (!isRecord(parsed)) return { foods: defaultFoods(), log: {} }
-  const foods = Array.isArray(parsed.foods)
-    ? parsed.foods.map(normaliseFood).filter((f): f is Food => f !== null)
-    : defaultFoods()
-  return { foods, log: normaliseLog(parsed.log) }
+  if (isRecord(parsed)) {
+    return { plans: normalisePlans(parsed.plans, normalise), log: normaliseLog(parsed.log) }
+  }
+  if (legacyRaw === null) return { plans: {}, log: {} }
+  const legacy = parseJson(legacyRaw)
+  const list =
+    isRecord(legacy) && Array.isArray(legacy[legacyListKey])
+      ? (legacy[legacyListKey] as unknown[]).map(normalise).filter((it): it is T => it !== null)
+      : defaults()
+  const log = normaliseLog(isRecord(legacy) ? legacy.log : undefined)
+  const plans: Plans<T> = {}
+  for (const week of new Set([...Object.keys(log), currentWeek])) {
+    plans[week] = list.map((it) => ({ ...it }))
+  }
+  return { plans, log }
+}
+
+export function parsePlannerData(
+  raw: string | null,
+  legacyRaw: string | null,
+  currentWeek: string,
+): PlannerData {
+  return parseTracked(raw, legacyRaw, currentWeek, 'exercises', normaliseExercise, defaultExercises)
+}
+
+export function parseDietData(
+  raw: string | null,
+  legacyRaw: string | null,
+  currentWeek: string,
+): DietData {
+  return parseTracked(raw, legacyRaw, currentWeek, 'foods', normaliseFood, defaultFoods)
 }
 
 export function parseSettings(raw: string | null): Settings {

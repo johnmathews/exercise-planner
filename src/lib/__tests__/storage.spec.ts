@@ -11,50 +11,92 @@ import {
   writeKey,
 } from '@/lib/storage'
 
+const WEEK = '2026-10-19'
+
+/** Migrate a legacy single-list payload, as the stores do when no v2 data exists. */
+function legacy(raw: string | null) {
+  const { plans, log } = parsePlannerData(null, raw, WEEK)
+  return { exercises: plans[WEEK]!, plans, log }
+}
+
 describe('parsePlannerData', () => {
-  it('returns the default exercises and an empty log when nothing is stored', () => {
-    expect(parsePlannerData(null)).toEqual({ exercises: defaultExercises(), log: {} })
+  it('starts with no plans and an empty log when nothing is stored', () => {
+    expect(parsePlannerData(null, null, WEEK)).toEqual({ plans: {}, log: {} })
   })
 
-  it('falls back to defaults on invalid JSON', () => {
-    expect(parsePlannerData('{not json')).toEqual({ exercises: defaultExercises(), log: {} })
+  it('round-trips a v2 payload and ignores the legacy key', () => {
+    const data = {
+      plans: {
+        '2026-10-19': [
+          { id: 'sq', name: 'Squats', sets: 3, reps: 15, perSide: false, weight: 12, target: 4 },
+        ],
+        '2026-10-26': [],
+      },
+      log: { '2026-10-19': { sq: [true, false, false, false, false, false, false] } },
+    }
+    const parsed = parsePlannerData(JSON.stringify(data), '{"exercises":[]}', WEEK)
+    expect(JSON.stringify(parsed)).toBe(JSON.stringify(data))
   })
 
-  it('round-trips a payload written by the design prototype unchanged', () => {
+  it('drops bad weeks and bad items from v2 plans', () => {
+    const parsed = parsePlannerData(
+      JSON.stringify({
+        plans: {
+          '2026-10-19': [{ id: 'a', name: 'A', reps: 1 }, null],
+          nope: [],
+          '2026-10-26': 'x',
+        },
+      }),
+      null,
+      WEEK,
+    )
+    expect(parsed.plans).toEqual({ '2026-10-19': [{ id: 'a', name: 'A', reps: 1, target: 3 }] })
+    expect(parsed.log).toEqual({})
+    expect(parsePlannerData('{"plans":"x"}', null, WEEK).plans).toEqual({})
+  })
+
+  it('migrates a legacy list to every logged week and the current week', () => {
     const prototype = {
       exercises: [
         { id: 'pu', name: 'Push-ups', reps: 10, target: 4 },
         { id: 'kh', name: 'Kettlebell halos', reps: 8, perSide: true, target: 3 },
-        { id: 'x1729700000000', name: 'Plank', reps: 0, perSide: false, target: 3 },
       ],
-      log: { '2026-10-19': { pu: [true, false, true, false, false, false, false] } },
+      log: { '2026-10-05': { pu: [true, false, true, false, false, false, false] } },
     }
-    const parsed = parsePlannerData(JSON.stringify(prototype))
-    expect(parsed).toEqual(prototype)
-    expect(JSON.stringify(parsed)).toBe(JSON.stringify(prototype))
+    const parsed = parsePlannerData(null, JSON.stringify(prototype), WEEK)
+    expect(Object.keys(parsed.plans).sort()).toEqual(['2026-10-05', WEEK])
+    expect(parsed.plans[WEEK]).toEqual(prototype.exercises)
+    expect(parsed.plans['2026-10-05']).toEqual(prototype.exercises)
+    // Separate copies, so editing one week can't change another.
+    expect(parsed.plans[WEEK]![0]).not.toBe(parsed.plans['2026-10-05']![0])
+    expect(parsed.log).toEqual(prototype.log)
   })
 
-  it('keeps exercises when log is missing (the prototype crashed here)', () => {
-    const parsed = parsePlannerData(
+  it('migrates invalid legacy JSON as the defaults', () => {
+    expect(legacy('{not json').exercises).toEqual(defaultExercises())
+  })
+
+  it('keeps legacy exercises when log is missing (the prototype crashed here)', () => {
+    const parsed = legacy(
       JSON.stringify({ exercises: [{ id: 'a', name: 'A', reps: 5, target: 2 }] }),
     )
     expect(parsed.exercises).toHaveLength(1)
     expect(parsed.log).toEqual({})
   })
 
-  it('keeps the log when exercises is missing, restoring default exercises', () => {
-    const log = { '2026-10-19': { pu: [true, true, false, false, false, false, false] } }
-    const parsed = parsePlannerData(JSON.stringify({ log }))
+  it('keeps the legacy log when exercises is missing, restoring default exercises', () => {
+    const log = { [WEEK]: { pu: [true, true, false, false, false, false, false] } }
+    const parsed = legacy(JSON.stringify({ log }))
     expect(parsed.exercises).toEqual(defaultExercises())
     expect(parsed.log).toEqual(log)
   })
 
   it('keeps an intentionally empty exercise list', () => {
-    expect(parsePlannerData(JSON.stringify({ exercises: [], log: {} })).exercises).toEqual([])
+    expect(legacy(JSON.stringify({ exercises: [], log: {} })).exercises).toEqual([])
   })
 
   it('drops malformed exercises and clamps or defaults bad fields', () => {
-    const parsed = parsePlannerData(
+    const parsed = legacy(
       JSON.stringify({
         exercises: [
           { id: 'ok', name: 'Ok', reps: -4, target: 12 },
@@ -72,7 +114,7 @@ describe('parsePlannerData', () => {
   })
 
   it('normalises log arrays to seven booleans and drops bad weeks', () => {
-    const parsed = parsePlannerData(
+    const parsed = legacy(
       JSON.stringify({
         exercises: [],
         log: {
@@ -88,9 +130,9 @@ describe('parsePlannerData', () => {
   })
 })
 
-describe('exercise weight', () => {
+describe('exercise sets and weight', () => {
   it('keeps a valid weight and drops a missing, zero or invalid one', () => {
-    const data = parsePlannerData(
+    const { exercises } = legacy(
       JSON.stringify({
         exercises: [
           { id: 'a', name: 'A', reps: 15, weight: 12, target: 3 },
@@ -98,11 +140,10 @@ describe('exercise weight', () => {
           { id: 'c', name: 'C', reps: 15, weight: '12', target: 3 },
           { id: 'd', name: 'D', reps: 15, target: 3 },
         ],
-        log: {},
       }),
     )
-    expect(data.exercises.map((e) => e.weight)).toEqual([12, undefined, undefined, undefined])
-    expect(data.exercises.slice(1).every((e) => !('weight' in e))).toBe(true)
+    expect(exercises.map((e) => e.weight)).toEqual([12, undefined, undefined, undefined])
+    expect(exercises.slice(1).every((e) => !('weight' in e))).toBe(true)
   })
 
   it('rounds to two decimals and caps at 500 kg', () => {
@@ -112,38 +153,61 @@ describe('exercise weight', () => {
     expect(normaliseWeight(0.004)).toBeUndefined()
     expect(normaliseWeight(Number.NaN)).toBeUndefined()
   })
+
+  it('keeps sets as a whole number from 1 to 20 and drops anything else', () => {
+    const { exercises } = legacy(
+      JSON.stringify({
+        exercises: [
+          { id: 'a', name: 'A', sets: 3, reps: 10 },
+          { id: 'b', name: 'B', sets: 50, reps: 10 },
+          { id: 'c', name: 'C', sets: 0, reps: 10 },
+          { id: 'd', name: 'D', sets: 'three', reps: 10 },
+        ],
+      }),
+    )
+    expect(exercises.map((e) => e.sets)).toEqual([3, 20, undefined, undefined])
+    expect(exercises.slice(2).every((e) => !('sets' in e))).toBe(true)
+  })
 })
 
 describe('parseDietData', () => {
-  it('returns the default foods and an empty log when nothing is stored', () => {
-    expect(parseDietData(null)).toEqual({ foods: defaultFoods(), log: {} })
+  it('starts with no plans when nothing is stored', () => {
+    expect(parseDietData(null, null, WEEK)).toEqual({ plans: {}, log: {} })
     expect(defaultFoods().map((f) => f.name)).toEqual(['Vegetables', 'Fruit', 'Fish', 'Nuts'])
   })
 
-  it('round-trips a valid payload byte for byte', () => {
+  it('round-trips a v2 payload byte for byte', () => {
     const data = {
-      foods: [{ id: 'veg', name: 'Vegetables', target: 7 }],
-      log: { '2026-10-19': { veg: [true, false, false, false, false, false, true] } },
+      plans: { [WEEK]: [{ id: 'veg', name: 'Vegetables', target: 7 }] },
+      log: { [WEEK]: { veg: [true, false, false, false, false, false, true] } },
     }
-    expect(JSON.stringify(parseDietData(JSON.stringify(data)))).toBe(JSON.stringify(data))
+    expect(JSON.stringify(parseDietData(JSON.stringify(data), null, WEEK))).toBe(
+      JSON.stringify(data),
+    )
   })
 
-  it('falls back per field and drops or clamps bad foods', () => {
+  it('migrates a legacy list, dropping or clamping bad foods', () => {
     const parsed = parseDietData(
+      null,
       JSON.stringify({
         foods: [{ id: 'a', name: 'A', target: 9 }, { id: 'b', name: 'B' }, { name: 'no id' }],
         log: 'nope',
       }),
+      WEEK,
     )
     expect(parsed).toEqual({
-      foods: [
-        { id: 'a', name: 'A', target: 7 },
-        { id: 'b', name: 'B', target: 3 },
-      ],
+      plans: {
+        [WEEK]: [
+          { id: 'a', name: 'A', target: 7 },
+          { id: 'b', name: 'B', target: 3 },
+        ],
+      },
       log: {},
     })
-    expect(parseDietData('{bad').foods).toEqual(defaultFoods())
-    expect(parseDietData(JSON.stringify({ log: {} })).foods).toEqual(defaultFoods())
+    expect(parseDietData(null, '{bad', WEEK).plans[WEEK]).toEqual(defaultFoods())
+    expect(parseDietData(null, JSON.stringify({ log: {} }), WEEK).plans[WEEK]).toEqual(
+      defaultFoods(),
+    )
   })
 })
 

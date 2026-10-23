@@ -51,7 +51,10 @@ onBeforeUnmount(() => {
       :aria-controls="panelId"
       @click="open = !open"
     >
-      <span class="size-2 rounded-full bg-accent" aria-hidden="true" />Settings
+      <span class="size-2 rounded-full bg-accent" aria-hidden="true" />
+      <!-- Below 380px a gear stands in for the word, so the navbar fits a 320px screen. -->
+      <span class="hidden max-[379px]:inline" aria-hidden="true">⚙&#xFE0E;</span>
+      <span class="max-[379px]:sr-only">Settings</span>
     </button>
     <div
       v-if="open"

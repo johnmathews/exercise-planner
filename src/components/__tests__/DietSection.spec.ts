@@ -15,6 +15,13 @@ function mountApp(): VueWrapper {
   return wrapper
 }
 
+/** Mount with config mode on, where the plan-editing controls are. */
+async function mountConfig(): Promise<VueWrapper> {
+  mountApp()
+  await wrapper.get('button[role="switch"]').trigger('click')
+  return wrapper
+}
+
 function diet() {
   return wrapper.get('[data-testid="diet-grid"]')
 }
@@ -78,7 +85,7 @@ describe('DietSection', () => {
   })
 
   it('adds a food, persists it, and removes one after confirmation', async () => {
-    mountApp()
+    await mountConfig()
     await wrapper.get('input[aria-label="New food name"]').setValue('Beans')
     await wrapper.get('input[aria-label="New food name"]').trigger('submit')
     expect(diet().findAll('[data-testid="item-name"]').at(-1)!.text()).toBe('Beans')
@@ -86,7 +93,9 @@ describe('DietSection', () => {
       (wrapper.get('input[aria-label="New food name"]').element as HTMLInputElement).value,
     ).toBe('')
     await wrapper.vm.$nextTick()
-    expect(JSON.parse(localStorage.getItem(DIET_KEY)!).foods.at(-1).name).toBe('Beans')
+    expect(JSON.parse(localStorage.getItem(DIET_KEY)!).plans['2026-10-19'].at(-1).name).toBe(
+      'Beans',
+    )
 
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await diet().get('button[aria-label="Remove Nuts"]').trigger('click')
@@ -94,7 +103,7 @@ describe('DietSection', () => {
   })
 
   it('ignores an empty food name', async () => {
-    mountApp()
+    await mountConfig()
     await wrapper.get('input[aria-label="New food name"]').setValue('   ')
     await wrapper.get('input[aria-label="New food name"]').trigger('submit')
     expect(cells('Vegetables')).toHaveLength(7)
@@ -102,7 +111,7 @@ describe('DietSection', () => {
   })
 
   it('adjusts a food goal with the stepper', async () => {
-    mountApp()
+    await mountConfig()
     await diet().get('button[aria-label="Lower Fish goal"]').trigger('click')
     expect(diet().findAll('[data-testid="row-total"]')[2]!.text()).toBe('0 / 1')
   })
@@ -111,7 +120,7 @@ describe('DietSection', () => {
     mountApp()
     localStorage.setItem(
       DIET_KEY,
-      JSON.stringify({ foods: [{ id: 'q', name: 'Quinoa', target: 2 }] }),
+      JSON.stringify({ plans: { '2026-10-19': [{ id: 'q', name: 'Quinoa', target: 2 }] } }),
     )
     window.dispatchEvent(new StorageEvent('storage', { key: DIET_KEY, storageArea: localStorage }))
     await wrapper.vm.$nextTick()

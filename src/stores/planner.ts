@@ -1,15 +1,26 @@
 import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
-import { DAY_NAMES, dateKey, formatShort, mondayOf, weekDates, weekLabel } from '@/lib/dates'
+import {
+  DAY_NAMES,
+  addDays,
+  dateKey,
+  formatShort,
+  mondayOf,
+  weekDates,
+  weekLabel,
+} from '@/lib/dates'
 import {
   DATA_KEY,
+  LEGACY_DATA_KEY,
   MAX_DAILY_PICK,
+  MAX_SETS,
   MAX_TARGET,
   MIN_DAILY_PICK,
   MIN_TARGET,
   NEW_EXERCISE_TARGET,
   SETTINGS_KEY,
   clamp,
+  defaultExercises,
   normaliseWeight,
   parsePlannerData,
   parseSettings,
@@ -20,15 +31,28 @@ import {
 } from '@/lib/storage'
 import * as tracker from '@/lib/tracker'
 import type { Theme } from '@/lib/theme'
+import { copyPlan, planSource, type Plans } from '@/lib/plans'
 
 export type Day = { name: string; date: string; key: string; isToday: boolean }
 
-export type NewExercise = { name: string; reps: number; perSide: boolean; weight?: number }
+export type NewExercise = {
+  name: string
+  sets?: number
+  reps: number
+  perSide: boolean
+  weight?: number
+}
 
-/** The chips under an exercise name, e.g. ["15 reps / set", "12 kg"]; "—" when it has neither. */
+/**
+ * The chips under an exercise name: "3 × 10 reps" or "3 × 8 each side" ("10 reps / set" and
+ * "8 each side / set" without a set count, "3 sets" without reps), then "12 kg" when weighted;
+ * "—" when it has none of these.
+ */
 export function exerciseDetails(e: Exercise): string[] {
   const chips: string[] = []
-  if (e.reps) chips.push(e.perSide ? `${e.reps} each side / set` : `${e.reps} reps / set`)
+  const count = e.perSide ? `${e.reps} each side` : `${e.reps} reps`
+  if (e.reps) chips.push(e.sets ? `${e.sets} × ${count}` : `${count} / set`)
+  else if (e.sets) chips.push(`${e.sets} sets`)
   if (e.weight) chips.push(`${e.weight} kg`)
   return chips.length ? chips : ['—']
 }
@@ -38,27 +62,55 @@ function exerciseFields(input: NewExercise): Omit<Exercise, 'id' | 'target'> | n
   const name = input.name.trim()
   if (!name) return null
   const reps = Number.isFinite(input.reps) && input.reps > 0 ? Math.floor(input.reps) : 0
+  const sets = Math.min(MAX_SETS, Math.floor(input.sets ?? 0))
   const weight = normaliseWeight(input.weight)
-  return { name, reps, perSide: input.perSide, ...(weight !== undefined ? { weight } : {}) }
+  return {
+    name,
+    ...(sets > 0 ? { sets } : {}),
+    reps,
+    perSide: input.perSide,
+    ...(weight !== undefined ? { weight } : {}),
+  }
 }
 
 export const usePlannerStore = defineStore('planner', () => {
-  const data = parsePlannerData(readKey(DATA_KEY))
+  /** "Now" as a ref so the today column moves when the tab is revisited after midnight. */
+  const now = ref(new Date())
+  /** Monday of the real current week, whichever week is on screen. */
+  const currentWeekKey = computed(() => dateKey(mondayOf(now.value, 0)))
+  const loadData = () =>
+    parsePlannerData(readKey(DATA_KEY), readKey(LEGACY_DATA_KEY), currentWeekKey.value)
+  const data = loadData()
   const settings = parseSettings(readKey(SETTINGS_KEY))
 
-  const exercises = ref<Exercise[]>(data.exercises)
+  const plans = ref<Plans<Exercise>>(data.plans)
   const log = ref<Log>(data.log)
   const weekOffset = ref(0)
   const accent = ref(settings.accent)
   const dailyPick = ref(settings.dailyPick)
   const theme = ref<Theme>(settings.theme)
-  /** "Now" as a ref so the today column moves when the tab is revisited after midnight. */
-  const now = ref(new Date())
+  /** Config mode shows the plan-editing controls; normal mode only ticks cells. Not persisted. */
+  const configMode = ref(false)
 
   const monday = computed(() => mondayOf(now.value, weekOffset.value))
   const weekKey = computed(() => dateKey(monday.value))
   const label = computed(() => weekLabel(monday.value))
+  const nextWeekKey = computed(() => dateKey(addDays(monday.value, 7)))
   const week = computed(() => log.value[weekKey.value] ?? {})
+
+  /** The week whose plan is showing; null while only the defaults exist. */
+  const planWeek = computed(() => planSource(plans.value, weekKey.value))
+  /** This week's exercises: its own plan, or the one it carries forward (see `planSource`). */
+  const exercises = computed<Exercise[]>(() =>
+    planWeek.value ? plans.value[planWeek.value]! : defaultExercises(),
+  )
+  /** The week this one's plan is carried over from, or null when it has its own. */
+  const carriedFrom = computed(() => (planWeek.value === weekKey.value ? null : planWeek.value))
+
+  /** The visible week's own plan, copied from what it shows on its first change. */
+  function own(): Exercise[] {
+    return (plans.value[weekKey.value] ??= copyPlan(exercises.value))
+  }
 
   const days = computed<Day[]>(() => {
     const todayKey = dateKey(now.value)
@@ -81,12 +133,15 @@ export const usePlannerStore = defineStore('planner', () => {
   const dayCounts = computed(() => tracker.dayCounts(exercises.value, week.value))
   const grandTotal = computed(() => tracker.grandTotal(exercises.value, week.value))
 
+  // Any change to a week, ticks included, gives it its own plan, so later edits to the week it was
+  // carried from no longer move it.
   function toggle(id: string, day: number): void {
+    own()
     tracker.toggleDay(log.value, weekKey.value, id, day)
   }
 
   function changeTarget(id: string, delta: number): void {
-    const e = exercises.value.find((x) => x.id === id)
+    const e = own().find((x) => x.id === id)
     if (e) e.target = clamp(e.target + delta, MIN_TARGET, MAX_TARGET)
   }
 
@@ -94,23 +149,35 @@ export const usePlannerStore = defineStore('planner', () => {
   function addExercise(input: NewExercise): boolean {
     const fields = exerciseFields(input)
     if (!fields) return false
-    exercises.value.push({ id: tracker.newId(), ...fields, target: NEW_EXERCISE_TARGET })
+    own().push({ id: tracker.newId(), ...fields, target: NEW_EXERCISE_TARGET })
     return true
   }
 
-  /** Replaces name, reps, per-side and weight, keeping the id, goal and history. */
+  /** Replaces name, sets, reps, per-side and weight this week, keeping the id, goal and history. */
   function updateExercise(id: string, input: NewExercise): boolean {
     const fields = exerciseFields(input)
-    const i = exercises.value.findIndex((e) => e.id === id)
-    if (!fields || i === -1) return false
-    const { target } = exercises.value[i]!
-    exercises.value[i] = { id, ...fields, target }
+    if (!fields || !exercises.value.some((e) => e.id === id)) return false
+    const list = own()
+    const i = list.findIndex((e) => e.id === id)
+    list[i] = { id, ...fields, target: list[i]!.target }
     return true
   }
 
-  /** Removes the exercise; its log history stays in storage, as the handoff allows. */
+  /** Removes the exercise from this week; its log history stays in storage. */
   function removeExercise(id: string): void {
-    exercises.value = exercises.value.filter((e) => e.id !== id)
+    plans.value[weekKey.value] = own().filter((e) => e.id !== id)
+  }
+
+  /** Whether the next week already has a plan of its own, which a copy would replace. */
+  const nextWeekHasPlan = computed(() => nextWeekKey.value in plans.value)
+
+  /** Gives the next week a copy of this week's exercises, replacing any plan it had. */
+  function copyToNextWeek(): void {
+    plans.value[nextWeekKey.value] = copyPlan(exercises.value)
+  }
+
+  function setConfigMode(on: boolean): void {
+    configMode.value = on
   }
 
   function prevWeek(): void {
@@ -134,8 +201,8 @@ export const usePlannerStore = defineStore('planner', () => {
    */
   function syncFromStorage(key: string | null): void {
     if (key === null || key === DATA_KEY) {
-      const fresh = parsePlannerData(readKey(DATA_KEY))
-      exercises.value = fresh.exercises
+      const fresh = loadData()
+      plans.value = fresh.plans
       log.value = fresh.log
     }
     if (key === null || key === SETTINGS_KEY) {
@@ -156,13 +223,10 @@ export const usePlannerStore = defineStore('planner', () => {
     theme.value = next
   }
 
-  watch(
-    [exercises, log],
-    () => writeKey(DATA_KEY, { exercises: exercises.value, log: log.value }),
-    {
-      deep: true,
-    },
-  )
+  const save = () => writeKey(DATA_KEY, { plans: plans.value, log: log.value })
+  watch([plans, log], save, { deep: true })
+  // Save a migration from the legacy key straight away, so it runs only once.
+  if (readKey(DATA_KEY) === null && readKey(LEGACY_DATA_KEY) !== null) save()
   watch([accent, dailyPick, theme], () =>
     writeKey(SETTINGS_KEY, {
       accent: accent.value,
@@ -172,7 +236,9 @@ export const usePlannerStore = defineStore('planner', () => {
   )
 
   return {
+    plans,
     exercises,
+    carriedFrom,
     log,
     weekOffset,
     accent,
@@ -181,6 +247,8 @@ export const usePlannerStore = defineStore('planner', () => {
     now,
     monday,
     weekKey,
+    currentWeekKey,
+    nextWeekKey,
     label,
     days,
     dayCounts,
@@ -192,6 +260,10 @@ export const usePlannerStore = defineStore('planner', () => {
     addExercise,
     updateExercise,
     removeExercise,
+    nextWeekHasPlan,
+    copyToNextWeek,
+    configMode,
+    setConfigMode,
     prevWeek,
     nextWeek,
     thisWeek,

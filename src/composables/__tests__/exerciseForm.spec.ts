@@ -18,9 +18,30 @@ describe('input cleaning', () => {
 describe('useExerciseForm', () => {
   it('loads an exercise, reports its value, and resets', () => {
     const form = useExerciseForm()
-    form.load({ id: 'kh', name: 'Kettlebell halos', reps: 8, perSide: true, weight: 8, target: 3 })
-    expect(form.value()).toEqual({ name: 'Kettlebell halos', reps: 8, perSide: true, weight: 8 })
+    form.load({
+      id: 'kh',
+      name: 'Kettlebell halos',
+      sets: 3,
+      reps: 8,
+      perSide: true,
+      weight: 8,
+      target: 3,
+    })
+    expect(form.value()).toEqual({
+      name: 'Kettlebell halos',
+      sets: 3,
+      reps: 8,
+      perSide: true,
+      weight: 8,
+    })
+    expect(form.sets.value).toBe('3')
     form.load()
-    expect(form.value()).toEqual({ name: '', reps: 0, perSide: false, weight: undefined })
+    expect(form.value()).toStrictEqual({
+      name: '',
+      sets: undefined,
+      reps: 0,
+      perSide: false,
+      weight: undefined,
+    })
   })
 })

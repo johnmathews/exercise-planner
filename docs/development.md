@@ -51,30 +51,37 @@ Tests sit in `__tests__/` next to the code they cover:
 
 - `src/lib/__tests__/dates.spec.ts`: Monday maths, offsets, year boundary, the 2026-10-25 week (a
   DST change in EU timezones), labels.
-- `src/lib/__tests__/storage.spec.ts`: payload validation, a byte-exact prototype round-trip,
-  exercise weight, diet parsing, settings parsing, skip-unchanged writes, storage that throws.
-- `src/composables/__tests__/exerciseForm.spec.ts`: digits-only reps and decimal weight cleaning,
-  loading and resetting the shared exercise form.
+- `src/lib/__tests__/storage.spec.ts`: v2 plan validation and round-trip, migration from the v1
+  (prototype) format, log normalisation, sets and weight, diet parsing, settings parsing,
+  skip-unchanged writes, storage that throws.
+- `src/lib/__tests__/plans.spec.ts`: which week's plan a week shows (own, carried forward, earliest,
+  none) and plan copies.
+- `src/composables/__tests__/exerciseForm.spec.ts`: digits-only sets/reps and decimal weight
+  cleaning, loading and resetting the shared exercise form.
 - `src/lib/__tests__/tracker.spec.ts`: the shared tick-per-day helpers (totals, day counts, goals
   met, toggling, ids).
 - `src/lib/__tests__/theme.spec.ts`: theme names and how System, Light and Dark resolve.
 - `src/stores/__tests__/planner.spec.ts`: toggling, totals, week navigation, goal clamping, adding,
-  removal's effect on totals, persistence, settings, detail chips, editing exercises (weight
-  included), the midnight refresh, and `syncFromStorage`.
+  removal's effect on totals, persistence and v1 migration, settings, detail chips, editing
+  exercises, sets, weekly plans (defaults, carry forward, a week getting its own plan, copying to
+  the next week), config mode, the midnight refresh, and `syncFromStorage`.
 - `src/stores/__tests__/diet.spec.ts`: food toggling in the planner's week, persistence under the
-  diet key only, shared week navigation, goal clamping, add/remove, cross-tab sync.
+  diet key only, shared week navigation, goal clamping, add/remove, cross-tab sync, carrying and
+  copying food plans, v1 migration.
 - `src/components/__tests__/App.spec.ts`: the mounted app in jsdom. Covers rendering, the today
   column, cell toggling and `aria-pressed`, footer colours, the goal stepper and its bounds,
   navigation, confirm-before-remove, print, the visibility and one-minute clock refresh, cross-tab
   `storage` events, the add form, the settings popover including focus return, and the theme: the
   `dark` class following the OS (with a stubbed `matchMedia`), the theme buttons and their
-  persistence. Also the weight field and the edit dialog (with `showModal`/`close` stubbed, as jsdom
-  has no modal dialogs). Queries that
-  would also match the diet grid scope to `[data-testid="exercise-grid"]`; the rest rely on
-  exercise-only labels or on the exercise form coming first in the DOM.
+  persistence. Also the weight and sets fields, the edit dialog (with `showModal`/`close` stubbed,
+  as jsdom has no modal dialogs), normal mode hiding every editing control, copying the plan to
+  the next week (with and without the replace confirmation), and the carried-over note. Tests that
+  edit the plan mount with `mountConfig()`, which turns config mode on. Queries that would also
+  match the diet grid scope to `[data-testid="exercise-grid"]`; the rest rely on exercise-only
+  labels or on the exercise form coming first in the DOM.
 - `src/components/__tests__/DietSection.spec.ts`: the diet section in the mounted app: default
-  foods, ticking, footer and goals-met counts, shared week navigation, add/remove, goal stepper,
-  cross-tab sync.
+  foods, ticking, footer and goals-met counts, shared week navigation, add/remove and the goal
+  stepper (in config mode), cross-tab sync.
 
 Every test that depends on the date pins the clock with `vi.useFakeTimers({ toFake: ['Date'] })`
 (the minute-tick test also fakes `setInterval`), and all tests build dates with local-time

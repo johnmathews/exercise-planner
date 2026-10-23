@@ -26,10 +26,14 @@ export function decimalOnly(text: string): string {
 /** State and input handling shared by the add-exercise form and the edit dialog. */
 export function useExerciseForm() {
   const name = ref('')
+  const sets = ref('')
   const reps = ref('')
   const weight = ref('')
   const perSide = ref(false)
 
+  function onSetsInput(ev: Event): void {
+    sets.value = clean(ev, digitsOnly)
+  }
   function onRepsInput(ev: Event): void {
     reps.value = clean(ev, digitsOnly)
   }
@@ -40,6 +44,7 @@ export function useExerciseForm() {
   function value(): NewExercise {
     return {
       name: name.value,
+      sets: parseInt(sets.value, 10) || undefined,
       reps: parseInt(reps.value, 10) || 0,
       perSide: perSide.value,
       weight: parseFloat(weight.value) || undefined,
@@ -48,10 +53,11 @@ export function useExerciseForm() {
 
   function load(e?: Exercise): void {
     name.value = e?.name ?? ''
+    sets.value = e?.sets ? String(e.sets) : ''
     reps.value = e?.reps ? String(e.reps) : ''
     weight.value = e?.weight ? String(e.weight) : ''
     perSide.value = e?.perSide ?? false
   }
 
-  return { name, reps, weight, perSide, onRepsInput, onWeightInput, value, load }
+  return { name, sets, reps, weight, perSide, onSetsInput, onRepsInput, onWeightInput, value, load }
 }
