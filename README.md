@@ -8,29 +8,29 @@
 
 ## 1. What it does
 
-- **Exercises.** Each day, pick a few exercises (default three) and click their cells when done.
-  The **Week** column counts sessions against a weekly goal of 0–7 days and turns accent-coloured
-  once a non-zero goal is met. The footer counts picks per day: accent when the daily target is
-  met, orange when over.
-- **Diet.** Below the exercises, foods work the same way: tick each day you ate one, and its
-  Week column counts days against a goal. The section header shows how many food goals are met.
-  Defaults are Vegetables (7), Fruit (5), Fish (2) and Nuts (3).
-- Add an exercise with a name, an optional rep count, and "per set" or "each side, per set"; add
-  a food by name. New items start with a goal of 3. `×` removes one after a confirmation (its
-  history stays stored).
+- **Exercises.** Each day, pick a few exercises (default three) and click their cells when done. The
+  **Week** column counts sessions against a weekly goal of 0–7 days and turns accent-coloured once a
+  non-zero goal is met. The footer counts picks per day: accent when the daily target is met, orange
+  when over.
+- **Diet.** Below the exercises, foods work the same way: tick each day you ate one, and its Week
+  column counts days against a goal. The section header shows how many food goals are met. Defaults
+  are Vegetables (7), Fruit (5), Fish (2) and Nuts (3).
+- Add an exercise with a name, an optional rep count, and "per set" or "each side, per set"; add a
+  food by name. New items start with a goal of 3. `×` removes one after a confirmation (its history
+  stays stored).
 - `‹` / `›` move between weeks for both sections; past weeks persist. **Print…** produces a
   black-on-white sheet.
 - **Settings** sets the accent colour and the exercises-per-day target (1–8).
 
 ## 2. Getting started
 
-Prerequisites: Node `22.18+` or `24.12+`, and **npm 11**. npm 10.9, which ships with Node 22,
-crashes while resolving this project's dependencies.
+Prerequisites: Node `22.18+` or `24.12+`, and **npm 11**. Node 24.12+ ships npm 11; on Node 22,
+upgrade npm first, because the bundled npm 10.9 crashes while resolving this project's dependencies.
 
 ```bash
 git clone https://github.com/johnmathews/exercise-planner.git
 cd exercise-planner
-npm install -g npm@11      # or prefix the next command with: npx -y npm@11
+npm install -g npm@11      # Node 22 only; or run: npx -y npm@11 ci
 npm ci
 npm run dev                # http://localhost:5173
 ```
@@ -53,10 +53,10 @@ npm run preview            # serve dist/ locally
 The app is static files served by nginx in a container. CI publishes a multi-architecture image
 (`linux/amd64` and `linux/arm64`) to GHCR on every push to `main`:
 
-| Tag            | Points at                      |
-| -------------- | ------------------------------ |
-| `latest`       | the newest build of `main`     |
-| `sha-<commit>` | a specific commit, for pinning |
+| Tag               | Points at                                           |
+| ----------------- | --------------------------------------------------- |
+| `latest`          | the newest build of `main`                          |
+| `sha-<short sha>` | a specific commit (e.g. `sha-c28cb59`), for pinning |
 
 Run it with Docker; the container listens on port **8080** as a non-root user:
 
@@ -76,9 +76,9 @@ services:
     restart: unless-stopped
 ```
 
-Update to the newest build with `docker compose pull && docker compose up -d` (or `docker pull`
-and recreate the container). `GET /healthz` returns `200 ok`, and the image's `HEALTHCHECK` uses
-it. To build the image yourself instead: `docker build -t exercise-planner .`
+Update to the newest build with `docker compose pull && docker compose up -d` (or `docker pull` and
+recreate the container). `GET /healthz` returns `200 ok`, and the image's `HEALTHCHECK` uses it. To
+build the image yourself instead: `docker build -t exercise-planner .`
 
 **Keep the URL stable.** Every log lives in each browser's `localStorage`, scoped to the exact
 origin (scheme, host and port). Serving the app from a new hostname or port starts every browser
