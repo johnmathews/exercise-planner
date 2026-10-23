@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#0f0f10;color:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+a{color:#0a84ff}a:hover{color:#409cff}
+input:focus{outline:none}
+input::placeholder{color:#636366}
+@media print{
+body{background:#fff}
+[data-noprint]{display:none !important}
+[data-window],[data-window] [data-surface]{background:#fff !important;border-color:#bbb !important;box-shadow:none !important}
+[data-window] *{color:#000 !important;border-color:#ccc !important}
+[data-on="true"]{background:#000 !important;color:#fff !important}
+@page{size:landscape;margin:12mm}
+}
+</style>
+</helmet>
+<div style="min-height:100vh;box-sizing:border-box;padding:40px 24px 64px;background:radial-gradient(1200px 600px at 50% -10%,#26262a,#0f0f10)">
+  <div data-window="1" style="max-width:1120px;margin:0 auto;background:#1c1c1e;border:1px solid #3a3a3c;border-radius:12px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.55),0 0 0 .5px rgba(0,0,0,.8)">
+
+    <div data-surface="1" style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:10px 14px;background:#2c2c2e;border-bottom:1px solid #000">
+      <div data-noprint="1" style="display:flex;gap:8px;padding-right:6px">
+        <div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div>
+        <div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div>
+        <div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div>
+      </div>
+      <div style="flex:1;min-width:180px;display:flex;flex-direction:column;gap:1px">
+        <div style="font-size:13px;font-weight:600;letter-spacing:-.01em">Workout Log</div>
+        <div style="font-size:11px;color:#98989d">{{ weekLabel }}</div>
+      </div>
+      <div data-noprint="1" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <div style="display:flex;background:#1c1c1e;border:1px solid #3a3a3c;border-radius:7px;padding:2px;gap:2px">
+          <button onClick="{{ prevWeek }}" title="Previous week" style="height:24px;min-width:30px;padding:0 8px;border:none;background:transparent;color:#f5f5f7;border-radius:5px;font:500 13px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;white-space:nowrap" style-hover="background:#3a3a3c">‹</button>
+          <button onClick="{{ thisWeek }}" style="height:24px;padding:0 10px;border:none;background:#3a3a3c;color:#f5f5f7;border-radius:5px;font:500 12px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;white-space:nowrap" style-hover="background:#48484a">This Week</button>
+          <button onClick="{{ nextWeek }}" title="Next week" style="height:24px;min-width:30px;padding:0 8px;border:none;background:transparent;color:#f5f5f7;border-radius:5px;font:500 13px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;white-space:nowrap" style-hover="background:#3a3a3c">›</button>
+        </div>
+        <button onClick="{{ print }}" style="height:28px;padding:0 12px;border:1px solid #3a3a3c;background:#3a3a3c;color:#f5f5f7;border-radius:7px;font:500 12px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;white-space:nowrap" style-hover="background:#48484a">Print…</button>
+      </div>
+    </div>
+
+    <div style="padding:28px 28px 8px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <h1 style="margin:0;font-size:30px;font-weight:700;letter-spacing:-.025em">{{ weekLabel }}</h1>
+        <div style="font-size:13px;color:#98989d">Pick {{ dailyPick }} exercises a day. Click a cell when it’s done.</div>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:6px">
+        <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:30px;font-weight:600;color:{{ accent }}">{{ grandTotal }}</div>
+        <div style="font-size:13px;color:#98989d">sessions this week</div>
+      </div>
+    </div>
+
+    <div style="padding:16px 28px 0;overflow-x:auto">
+      <div data-surface="1" style="min-width:780px;display:grid;grid-template-columns:minmax(220px,1.7fr) repeat(7,minmax(64px,1fr)) minmax(124px,.9fr);border:1px solid #3a3a3c;border-radius:10px;overflow:hidden;background:#232325">
+        <div data-surface="1" style="padding:10px 16px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#98989d;background:#2a2a2c;border-bottom:1px solid #3a3a3c;display:flex;align-items:center">Exercise</div>
+        <sc-for list="{{ days }}" as="d" hint-placeholder-count="7">
+          <div data-surface="1" style="padding:8px 4px;text-align:center;background:{{ d.headBg }};border-bottom:1px solid #3a3a3c;border-left:1px solid #333336;display:flex;flex-direction:column;gap:1px">
+            <div style="font-size:12px;font-weight:600;color:{{ d.headColor }}">{{ d.name }}</div>
+            <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:{{ d.subColor }}">{{ d.date }}</div>
+          </div>
+        </sc-for>
+        <div data-surface="1" style="padding:10px 12px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#98989d;background:#2a2a2c;border-bottom:1px solid #3a3a3c;border-left:1px solid #48484a;display:flex;align-items:center;justify-content:center">Week</div>
+
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+          <div style="display:contents">
+            <div style="padding:10px 10px 10px 16px;border-bottom:1px solid #333336;display:flex;align-items:center;gap:8px;min-height:44px">
+              <div style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0">
+                <div style="font-weight:600;font-size:14px;letter-spacing:-.01em">{{ r.name }}</div>
+                <div style="display:flex">
+                  <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:11px;color:#98989d;background:#2c2c2e;border:1px solid #3a3a3c;border-radius:4px;padding:1px 6px;white-space:nowrap">{{ r.repsLabel }}</div>
+                </div>
+              </div>
+              <button data-noprint="1" onClick="{{ r.remove }}" title="Remove" style="width:24px;height:24px;border:none;background:transparent;color:#636366;border-radius:5px;cursor:pointer;font-size:15px" style-hover="background:#3a3a3c;color:#f5f5f7">×</button>
+            </div>
+            <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="7">
+              <div onClick="{{ c.toggle }}" style="border-bottom:1px solid #333336;border-left:1px solid #333336;padding:6px;cursor:pointer;display:flex;background:{{ c.colBg }}">
+                <div data-on="{{ c.on }}" style="flex:1;border-radius:6px;min-height:38px;background:{{ c.bg }};border:1px solid {{ c.border }};display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:700;box-shadow:{{ c.shadow }}">{{ c.mark }}</div>
+              </div>
+            </sc-for>
+            <div style="border-bottom:1px solid #333336;border-left:1px solid #48484a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:8px">
+              <div style="font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:20px;font-weight:600;white-space:nowrap;color:{{ r.totalColor }}">{{ r.total }}<span style="font-size:12px;color:#636366"> / {{ r.target }}</span></div>
+              <div data-noprint="1" style="display:flex;background:#1c1c1e;border:1px solid #3a3a3c;border-radius:5px;overflow:hidden">
+                <button onClick="{{ r.targetDown }}" title="Lower goal" style="width:24px;height:20px;border:none;background:transparent;cursor:pointer;font-size:12px;color:#98989d" style-hover="background:#3a3a3c;color:#f5f5f7">−</button>
+                <div style="width:1px;background:#3a3a3c"></div>
+                <button onClick="{{ r.targetUp }}" title="Raise goal" style="width:24px;height:20px;border:none;background:transparent;cursor:pointer;font-size:12px;color:#98989d" style-hover="background:#3a3a3c;color:#f5f5f7">+</button>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+
+        <div data-surface="1" style="padding:10px 16px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#98989d;background:#2a2a2c;display:flex;align-items:center">Picked / {{ dailyPick }}</div>
+        <sc-for list="{{ days }}" as="d" hint-placeholder-count="7">
+          <div data-surface="1" style="padding:10px 4px;text-align:center;background:#2a2a2c;border-left:1px solid #333336;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:13px;font-weight:600;color:{{ d.countColor }}">{{ d.count }}</div>
+        </sc-for>
+        <div data-surface="1" style="padding:10px;background:#2a2a2c;border-left:1px solid #48484a;text-align:center;font-family:'SF Mono',ui-monospace,Menlo,monospace;font-size:13px;font-weight:600">{{ grandTotal }}</div>
+      </div>
+    </div>
+
+    <form data-noprint="1" onSubmit="{{ addExercise }}" style="padding:20px 28px 28px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <input value="{{ newName }}" onChange="{{ setNewName }}" placeholder="New exercise" style="flex:1 1 220px;height:32px;padding:0 10px;border:1px solid #3a3a3c;border-radius:7px;background:#2c2c2e;font:400 13px -apple-system,BlinkMacSystemFont,sans-serif;color:#f5f5f7" style-focus="border-color:#0a84ff;box-shadow:0 0 0 3px rgba(10,132,255,.35)">
+      <input value="{{ newReps }}" onChange="{{ setNewReps }}" placeholder="Reps" inputMode="numeric" style="width:70px;height:32px;padding:0 10px;border:1px solid #3a3a3c;border-radius:7px;background:#2c2c2e;font:400 13px -apple-system,BlinkMacSystemFont,sans-serif;color:#f5f5f7" style-focus="border-color:#0a84ff;box-shadow:0 0 0 3px rgba(10,132,255,.35)">
+      <div style="display:flex;background:#1c1c1e;border:1px solid #3a3a3c;border-radius:7px;padding:2px;gap:2px">
+        <button type="button" onClick="{{ setPerSet }}" style="height:26px;padding:0 10px;border:none;border-radius:5px;font:500 12px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;white-space:nowrap;background:{{ perSetBg }};color:{{ perSetColor }}">per set</button>
+        <button type="button" onClick="{{ setPerSide }}" style="height:26px;padding:0 10px;border:none;border-radius:5px;font:500 12px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;white-space:nowrap;background:{{ perSideBg }};color:{{ perSideColor }}">each side, per set</button>
+      </div>
+      <button type="submit" style="height:32px;padding:0 16px;border:none;background:#0a84ff;color:#fff;border-radius:7px;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer" style-hover="background:#409cff">Add Exercise</button>
+    </form>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;dailyPick&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:3,&quot;min&quot;:1,&quot;max&quot;:8,&quot;tsType&quot;:&quot;number&quot;,&quot;label&quot;:&quot;Exercises per day&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#0a84ff&quot;,&quot;options&quot;:[&quot;#0a84ff&quot;,&quot;#30d158&quot;,&quot;#ff9f0a&quot;,&quot;#bf5af2&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem('exercise-planner-v1')); } catch (e) {}
+    this.state = saved || {
+      exercises: [
+        { id: 'pu', name: 'Push-ups', reps: 10, target: 4 },
+        { id: 'pl', name: 'Pull-ups', reps: 3, target: 4 },
+        { id: 'sq', name: 'Squats', reps: 15, target: 4 },
+        { id: 'be', name: 'Back extensions', reps: 12, target: 3 },
+        { id: 'kh', name: 'Kettlebell halos', reps: 8, perSide: true, target: 3 }
+      ],
+      log: {}
+    };
+    this.state.offset = 0; this.state.newName = ''; this.state.newReps = ''; this.state.newPerSide = false;
+  }
+  save(s) { this.setState(s, () => { const { exercises, log } = this.state; localStorage.setItem('exercise-planner-v1', JSON.stringify({ exercises, log })); }); }
+  monday(off) { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + off * 7); return d; }
+  key(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+  renderVals() {
+    const accent = this.props.accent ?? '#0a84ff';
+    const pick = this.props.dailyPick ?? 3;
+    const { exercises, log, offset, newPerSide } = this.state;
+    const mon = this.monday(offset), wk = this.key(mon), week = log[wk] || {};
+    const todayKey = this.key(new Date());
+    const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const dates = names.map((_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return d; });
+    const counts = dates.map((_, i) => exercises.filter(e => (week[e.id] || [])[i]).length);
+    const isToday = dates.map(d => this.key(d) === todayKey);
+    const toggle = (id, i) => this.save(s => {
+      const w = { ...(s.log[wk] || {}) }; const arr = [...(w[id] || Array(7).fill(false))];
+      arr[i] = !arr[i]; w[id] = arr; return { log: { ...s.log, [wk]: w } };
+    });
+    const setTarget = (id, dv) => this.save(s => ({ exercises: s.exercises.map(e => e.id === id ? { ...e, target: Math.max(0, Math.min(7, e.target + dv)) } : e) }));
+    let grand = 0;
+    const rows = exercises.map(e => {
+      const arr = week[e.id] || [];
+      const total = arr.filter(Boolean).length; grand += total;
+      return {
+        name: e.name, total, target: e.target,
+        repsLabel: e.reps ? (e.perSide ? e.reps + ' each side / set' : e.reps + ' reps / set') : '—',
+        totalColor: total >= e.target && e.target > 0 ? accent : '#f5f5f7',
+        remove: () => confirm('Remove ' + e.name + '?') && this.save(s => ({ exercises: s.exercises.filter(x => x.id !== e.id) })),
+        targetUp: () => setTarget(e.id, 1), targetDown: () => setTarget(e.id, -1),
+        cells: names.map((_, i) => ({
+          on: !!arr[i],
+          bg: arr[i] ? accent : '#1c1c1e', border: arr[i] ? accent : '#3a3a3c', mark: arr[i] ? '✓' : '',
+          shadow: arr[i] ? 'inset 0 1px 0 rgba(255,255,255,.25)' : 'inset 0 1px 2px rgba(0,0,0,.4)',
+          colBg: isToday[i] ? '#2a2a2e' : 'transparent', toggle: () => toggle(e.id, i)
+        }))
+      };
+    });
+    return {
+      accent, dailyPick: pick, rows, grandTotal: grand,
+      weekLabel: fmt(mon) + ' – ' + fmt(sun) + ', ' + sun.getFullYear(),
+      days: names.map((n, i) => ({
+        name: n, date: fmt(dates[i]).replace(/^\w+ /, ''), count: counts[i] + '/' + pick,
+        headBg: isToday[i] ? '#323236' : '#2a2a2c',
+        headColor: isToday[i] ? accent : '#f5f5f7', subColor: isToday[i] ? accent : '#98989d',
+        countColor: counts[i] === pick ? accent : counts[i] > pick ? '#ff9f0a' : '#636366'
+      })),
+      prevWeek: () => this.setState(s => ({ offset: s.offset - 1 })),
+      nextWeek: () => this.setState(s => ({ offset: s.offset + 1 })),
+      thisWeek: () => this.setState({ offset: 0 }),
+      print: () => window.print(),
+      newName: this.state.newName, newReps: this.state.newReps,
+      perSetBg: newPerSide ? 'transparent' : '#48484a', perSetColor: newPerSide ? '#98989d' : '#f5f5f7',
+      perSideBg: newPerSide ? '#48484a' : 'transparent', perSideColor: newPerSide ? '#f5f5f7' : '#98989d',
+      setPerSet: () => this.setState({ newPerSide: false }),
+      setPerSide: () => this.setState({ newPerSide: true }),
+      setNewName: ev => this.setState({ newName: ev.target.value }),
+      setNewReps: ev => this.setState({ newReps: ev.target.value.replace(/\D/g, '') }),
+      addExercise: ev => {
+        ev.preventDefault(); const name = this.state.newName.trim(); if (!name) return;
+        this.save(s => ({ exercises: [...s.exercises, { id: 'x' + Date.now(), name, reps: parseInt(s.newReps) || 0, perSide: s.newPerSide, target: 3 }], newName: '', newReps: '', newPerSide: false }));
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

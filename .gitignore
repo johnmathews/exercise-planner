@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.engineering-team/
+.worktrees/
+*.zip
+.DS_Store
+*.log
+test-results/
+playwright-report/
