@@ -46,14 +46,22 @@ Tests sit in `__tests__/` next to the code they cover:
 - `src/lib/__tests__/dates.spec.ts`: Monday maths, offsets, year boundary, the 2026-10-25 week
   (a DST change in EU timezones), labels.
 - `src/lib/__tests__/storage.spec.ts`: payload validation, a byte-exact prototype round-trip,
-  settings parsing, skip-unchanged writes, storage that throws.
+  diet parsing, settings parsing, skip-unchanged writes, storage that throws.
+- `src/lib/__tests__/tracker.spec.ts`: the shared tick-per-day helpers (totals, day counts, goals
+  met, toggling, ids).
 - `src/stores/__tests__/planner.spec.ts`: toggling, totals, week navigation, goal clamping,
   adding, removal's effect on totals, persistence, settings, reps labels, the midnight refresh,
   and `syncFromStorage`.
+- `src/stores/__tests__/diet.spec.ts`: food toggling in the planner's week, persistence under the
+  diet key only, shared week navigation, goal clamping, add/remove, cross-tab sync.
 - `src/components/__tests__/App.spec.ts`: the mounted app in jsdom. Covers rendering, the today
   column, cell toggling and `aria-pressed`, footer colours, the goal stepper and its bounds,
   navigation, confirm-before-remove, print, the visibility and one-minute clock refresh,
   cross-tab `storage` events, the add form, and the settings popover including focus return.
+  Queries scope to `[data-testid="exercise-grid"]` because the diet grid reuses the markup.
+- `src/components/__tests__/DietSection.spec.ts`: the diet section in the mounted app: default
+  foods, ticking, footer and goals-met counts, shared week navigation, add/remove, goal stepper,
+  cross-tab sync.
 
 Every test that depends on the date pins the clock with `vi.useFakeTimers({ toFake: ['Date'] })`, and
 all tests build dates with local-time constructors, so they pass in any timezone. No end-to-end
