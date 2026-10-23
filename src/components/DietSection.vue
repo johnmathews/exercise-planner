@@ -22,17 +22,20 @@ function flagsFor(id: string): boolean[] {
 </script>
 
 <template>
-  <section class="diet" aria-labelledby="diet-heading">
-    <div class="heading">
-      <div class="left">
-        <h2 id="diet-heading">Diet</h2>
-        <div class="sub">Click a cell on each day you ate it.</div>
+  <section
+    class="mt-10 border-t border-line print:mt-6 print:border-0"
+    aria-labelledby="diet-heading"
+  >
+    <div class="flex flex-wrap items-end justify-between gap-3 pt-8 pb-2 print:pt-0">
+      <div class="flex flex-col gap-1">
+        <h2 id="diet-heading" class="text-xl font-bold tracking-tight">Diet</h2>
+        <p class="text-sm text-muted">Click a cell on each day you ate it.</p>
       </div>
-      <div class="total">
-        <div class="mono value" data-testid="diet-goals-met">
-          {{ diet.goalsMet }}<span class="of"> / {{ diet.foods.length }}</span>
+      <div class="flex items-baseline gap-1.5">
+        <div class="font-mono text-xl font-semibold text-accent-fg" data-testid="diet-goals-met">
+          {{ diet.goalsMet }}<span class="text-sm text-faint"> / {{ diet.foods.length }}</span>
         </div>
-        <div class="sub">goals met</div>
+        <div class="text-sm text-muted">goals met</div>
       </div>
     </div>
     <TrackerGrid
@@ -53,53 +56,3 @@ function flagsFor(id: string): boolean[] {
     <AddFoodForm />
   </section>
 </template>
-
-<style scoped>
-.diet {
-  border-top: 1px solid var(--border-subtle);
-}
-
-.heading {
-  padding: 28px 28px 8px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.left {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.sub {
-  font-size: 13px;
-  color: var(--text-2);
-}
-
-.total {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.value {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--accent);
-}
-
-.of {
-  font-size: 13px;
-  color: var(--text-3);
-}
-</style>

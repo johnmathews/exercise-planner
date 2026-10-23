@@ -16,6 +16,17 @@ defineProps<{
   counts: { text: string; tone: CountTone }[]
   grandTotal: number
 }>()
+const LABEL =
+  'flex items-center py-2.5 text-[11px] font-semibold tracking-wider text-muted uppercase'
+const HEAD = 'border-b border-line'
+const COUNT = 'border-l bg-subtle px-1 py-2.5 text-center font-mono text-sm font-semibold'
+const TONE: Record<CountTone, string> = {
+  met: 'text-accent-fg',
+  over: 'text-warn',
+  under: 'text-faint',
+  plain: 'text-muted',
+}
+
 defineEmits<{
   toggle: [id: string, day: number]
   changeTarget: [id: string, delta: number]
@@ -24,22 +35,40 @@ defineEmits<{
 </script>
 
 <template>
-  <div class="grid-scroll">
-    <div class="grid" role="table" :aria-label="tableLabel" data-surface>
+  <div
+    class="mt-4 overflow-x-auto rounded-xl border border-line bg-surface shadow-xs print:break-inside-avoid print:overflow-visible"
+  >
+    <div
+      class="grid min-w-[780px] grid-cols-[minmax(220px,1.7fr)_repeat(7,minmax(64px,1fr))_minmax(124px,0.9fr)]"
+      role="table"
+      :aria-label="tableLabel"
+    >
       <div role="row" class="contents">
-        <div role="columnheader" class="head label-cell" data-surface>{{ label }}</div>
+        <div role="columnheader" :class="[LABEL, HEAD, 'bg-subtle px-4']">{{ label }}</div>
         <div
           v-for="d in days"
           :key="d.key"
           role="columnheader"
-          class="head day-head"
-          :class="{ today: d.isToday }"
-          data-surface
+          :class="[
+            HEAD,
+            'flex flex-col gap-px border-l border-l-line-subtle px-1 py-2 text-center',
+            // Not both: Tailwind's own utility order, not class order, would let bg-subtle win.
+            d.isToday ? 'bg-accent/10 text-accent-fg' : 'bg-subtle',
+          ]"
+          :data-today="d.isToday"
+          data-testid="day-head"
         >
-          <div class="day-name">{{ d.name }}</div>
-          <div class="mono day-date">{{ d.date }}</div>
+          <div class="text-xs font-semibold">{{ d.name }}</div>
+          <div class="font-mono text-[11px]" :class="d.isToday ? 'text-accent-fg' : 'text-muted'">
+            {{ d.date }}
+          </div>
         </div>
-        <div role="columnheader" class="head label-cell week-head" data-surface>Week</div>
+        <div
+          role="columnheader"
+          :class="[LABEL, HEAD, 'justify-center border-l border-l-line-strong bg-subtle px-3']"
+        >
+          Week
+        </div>
       </div>
 
       <TrackerRow
@@ -56,125 +85,19 @@ defineEmits<{
       />
 
       <div role="row" class="contents">
-        <div role="rowheader" class="foot label-cell" data-surface>{{ footerLabel }}</div>
+        <div role="rowheader" :class="[LABEL, 'bg-subtle px-4']">{{ footerLabel }}</div>
         <div
           v-for="(c, i) in counts"
           :key="i"
           role="cell"
-          class="foot mono count"
-          :class="c.tone"
-          data-surface
+          :class="[COUNT, 'border-l-line-subtle', TONE[c.tone]]"
+          :data-tone="c.tone"
           data-testid="day-count"
         >
           {{ c.text }}
         </div>
-        <div role="cell" class="foot mono count grand" data-surface>{{ grandTotal }}</div>
+        <div role="cell" :class="[COUNT, 'border-l-line-strong text-fg']">{{ grandTotal }}</div>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.grid-scroll {
-  padding: 16px 28px 0;
-  overflow-x: auto;
-}
-
-.grid {
-  min-width: 780px;
-  display: grid;
-  grid-template-columns: minmax(220px, 1.7fr) repeat(7, minmax(64px, 1fr)) minmax(124px, 0.9fr);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--grid);
-}
-
-.contents {
-  display: contents;
-}
-
-.head {
-  background: var(--header);
-  border-bottom: 1px solid var(--border);
-}
-
-.label-cell {
-  padding: 10px 16px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  display: flex;
-  align-items: center;
-}
-
-.week-head {
-  padding: 10px 12px;
-  justify-content: center;
-  border-left: 1px solid var(--border-strong);
-}
-
-.day-head {
-  padding: 8px 4px;
-  text-align: center;
-  border-left: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.day-head.today {
-  background: var(--today-head);
-}
-
-.day-name {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.day-date {
-  font-size: 11px;
-  color: var(--text-2);
-}
-
-.day-head.today .day-name,
-.day-head.today .day-date {
-  color: var(--accent);
-}
-
-.foot {
-  background: var(--header);
-}
-
-.count {
-  padding: 10px 4px;
-  text-align: center;
-  border-left: 1px solid var(--border-subtle);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.count.met {
-  color: var(--accent);
-}
-
-.count.over {
-  color: var(--warn);
-}
-
-.count.under {
-  color: var(--text-3);
-}
-
-.count.plain {
-  color: var(--text-2);
-}
-
-.count.grand {
-  padding: 10px;
-  border-left-color: var(--border-strong);
-  color: var(--text);
-}
-</style>

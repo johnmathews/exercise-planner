@@ -121,15 +121,18 @@ describe('parseDietData', () => {
 })
 
 describe('parseSettings', () => {
-  it('defaults to green accent and three a day', () => {
-    expect(parseSettings(null)).toEqual({ accent: '#30d158', dailyPick: 3 })
+  it('defaults to green accent, three a day and the system theme', () => {
+    expect(parseSettings(null)).toEqual({ accent: '#30d158', dailyPick: 3, theme: 'system' })
     expect(DEFAULT_SETTINGS.accent).toBe('#30d158')
   })
 
   it('accepts valid values and clamps daily pick to 1–8', () => {
-    expect(parseSettings(JSON.stringify({ accent: '#bf5af2', dailyPick: 20 }))).toEqual({
+    expect(
+      parseSettings(JSON.stringify({ accent: '#bf5af2', dailyPick: 20, theme: 'dark' })),
+    ).toEqual({
       accent: '#bf5af2',
       dailyPick: 8,
+      theme: 'dark',
     })
     expect(parseSettings(JSON.stringify({ dailyPick: 0 })).dailyPick).toBe(1)
   })
@@ -137,6 +140,12 @@ describe('parseSettings', () => {
   it('rejects a non-hex accent', () => {
     expect(parseSettings(JSON.stringify({ accent: 'red' })).accent).toBe('#30d158')
     expect(parseSettings('garbage')).toEqual(DEFAULT_SETTINGS)
+  })
+
+  it('falls back to the system theme for an unknown or missing theme', () => {
+    expect(parseSettings(JSON.stringify({ theme: 'sepia' })).theme).toBe('system')
+    // Settings saved before the theme option existed.
+    expect(parseSettings(JSON.stringify({ accent: '#0a84ff', dailyPick: 2 })).theme).toBe('system')
   })
 })
 

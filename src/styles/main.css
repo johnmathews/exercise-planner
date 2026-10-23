@@ -1,0 +1,161 @@
+@import 'tailwindcss';
+
+/* Dark mode follows a `.dark` class on <html>, set from the theme setting (System, Light or Dark). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Semantic colours. Components use `bg-surface`, `text-muted` and so on, and each theme supplies the
+ * values here, so templates rarely need a `dark:` variant.
+ */
+:root {
+  /* Overridden at runtime from the accent setting. */
+  --accent: #30d158;
+  /* The bright accents are hard to read as text on white, so light mode darkens them for text. */
+  --accent-fg: color-mix(in oklab, var(--accent) 62%, black);
+
+  --page: #f7f7f8;
+  --surface: #ffffff;
+  --subtle: #f4f4f5;
+  --well: #fafafa;
+  --selected: #ffffff;
+  --field: #ffffff;
+  --line: #e4e4e7;
+  --line-subtle: #ededf0;
+  --line-strong: #d4d4d8;
+  --fg: #18181b;
+  --muted: #52525b;
+  --faint: #6b6b73;
+  --warn: #c2410c;
+  --primary: #007aff;
+  --primary-hover: #0062cc;
+
+  color-scheme: light;
+}
+
+.dark {
+  --accent-fg: var(--accent);
+
+  --page: #141416;
+  --surface: #1c1c1e;
+  --subtle: #2a2a2c;
+  --well: #161618;
+  --selected: #48484a;
+  --field: #2c2c2e;
+  --line: #3a3a3c;
+  --line-subtle: #313134;
+  --line-strong: #48484a;
+  --fg: #f5f5f7;
+  --muted: #aeaeb2;
+  --faint: #909095;
+  --warn: #ff9f0a;
+  --primary: #0a84ff;
+  --primary-hover: #409cff;
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-well: var(--well);
+  --color-selected: var(--selected);
+  --color-field: var(--field);
+  --color-line: var(--line);
+  --color-line-subtle: var(--line-subtle);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-warn: var(--warn);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+}
+
+@layer base {
+  /* Keeps keyboard-focused content from scrolling under the sticky navbar. */
+  html {
+    scroll-padding-top: 4.5rem;
+  }
+
+  body {
+    @apply bg-page text-fg antialiased;
+  }
+
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Keyboard focus only; mouse clicks get no ring. */
+  button:focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary;
+  }
+}
+
+@layer components {
+  /* Neutral toolbar button, used in the navbar. */
+  .btn {
+    @apply inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 text-sm font-medium whitespace-nowrap text-fg shadow-xs hover:bg-subtle sm:px-3;
+  }
+
+  .btn-primary {
+    @apply inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-semibold whitespace-nowrap text-white hover:bg-primary-hover;
+  }
+
+  /* Text inputs in the add-exercise and add-food forms. */
+  /* One option in a segmented control (a track of aria-pressed buttons). */
+  .segment {
+    @apply rounded-md text-xs font-medium text-muted aria-pressed:bg-selected aria-pressed:text-fg aria-pressed:shadow-xs aria-pressed:ring-1 aria-pressed:ring-line;
+  }
+
+  .field {
+    @apply h-9 rounded-lg border border-line bg-field px-3 text-sm text-fg placeholder:text-faint focus:border-primary focus:ring-3 focus:ring-primary/30 focus:outline-none;
+  }
+}
+
+/*
+ * Printing gives a plain black-on-white sheet in either theme: the tokens switch to print values, so
+ * only done cells stay filled (black). `!important` on --accent beats the inline style the app sets.
+ */
+@media print {
+  @page {
+    size: landscape;
+    margin: 12mm;
+  }
+
+  :root,
+  .dark {
+    --accent: #000 !important;
+    --accent-fg: #000;
+    --page: #fff;
+    --surface: #fff;
+    --subtle: #fff;
+    --well: #fff;
+    --line: #bbb;
+    --line-subtle: #ccc;
+    --line-strong: #999;
+    --fg: #000;
+    --muted: #000;
+    --faint: #555;
+    --warn: #000;
+    color-scheme: light;
+  }
+
+  body {
+    print-color-adjust: exact;
+  }
+
+  [data-noprint] {
+    display: none !important;
+  }
+
+  [data-today='true'] {
+    background: transparent !important;
+  }
+
+  * {
+    box-shadow: none !important;
+  }
+}

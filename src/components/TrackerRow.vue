@@ -25,17 +25,27 @@ function remove(): void {
 
 <template>
   <!-- display: contents keeps every cell a direct child of the parent grid. -->
-  <div role="row" class="row">
-    <div role="rowheader" class="name-cell">
-      <div class="name-wrap">
-        <div class="name">{{ item.name }}</div>
-        <div v-if="detail" class="chip-row">
-          <span class="mono chip">{{ detail }}</span>
+  <div role="row" class="contents">
+    <div
+      role="rowheader"
+      class="flex min-h-11 items-center gap-2 border-b border-line-subtle py-2.5 pr-2.5 pl-4"
+    >
+      <div class="flex min-w-0 flex-1 flex-col gap-1">
+        <div class="text-sm font-semibold tracking-tight" data-testid="item-name">
+          {{ item.name }}
+        </div>
+        <div v-if="detail" class="flex">
+          <span
+            class="rounded border border-line bg-subtle px-1.5 py-px font-mono text-[11px] whitespace-nowrap text-muted"
+            data-testid="item-detail"
+          >
+            {{ detail }}
+          </span>
         </div>
       </div>
       <button
         type="button"
-        class="remove"
+        class="size-6 shrink-0 rounded-md text-faint hover:bg-subtle hover:text-fg"
         title="Remove"
         :aria-label="`Remove ${item.name}`"
         data-noprint
@@ -52,9 +62,17 @@ function remove(): void {
       :label="`${item.name}, ${d.name} ${d.date}`"
       @toggle="emit('toggle', i)"
     />
-    <div role="cell" class="week-cell">
-      <div class="mono total" :class="{ met }" data-testid="row-total">
-        {{ total }}<span class="target"> / {{ item.target }}</span>
+    <div
+      role="cell"
+      class="flex flex-col items-center justify-center gap-1.5 border-b border-l border-b-line-subtle border-l-line-strong p-2"
+    >
+      <div
+        class="font-mono text-xl font-semibold whitespace-nowrap"
+        :class="met ? 'text-accent-fg' : 'text-fg'"
+        :data-met="met"
+        data-testid="row-total"
+      >
+        {{ total }}<span class="text-xs text-faint"> / {{ item.target }}</span>
       </div>
       <NumberStepper
         :value="item.target"
@@ -70,88 +88,3 @@ function remove(): void {
     </div>
   </div>
 </template>
-
-<style scoped>
-.row {
-  display: contents;
-}
-
-.name-cell {
-  padding: 10px 10px 10px 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-}
-
-.name-wrap {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-
-.name {
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: -0.01em;
-}
-
-.chip-row {
-  display: flex;
-}
-
-.chip {
-  font-size: 11px;
-  color: var(--text-2);
-  background: var(--toolbar);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 6px;
-  white-space: nowrap;
-}
-
-.remove {
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  color: var(--text-3);
-  border-radius: 5px;
-  font-size: 15px;
-}
-
-.remove:hover {
-  background: var(--border);
-  color: var(--text);
-}
-
-.week-cell {
-  border-bottom: 1px solid var(--border-subtle);
-  border-left: 1px solid var(--border-strong);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 8px;
-}
-
-.total {
-  font-size: 20px;
-  font-weight: 600;
-  white-space: nowrap;
-  color: var(--text);
-}
-
-.total.met {
-  color: var(--accent);
-}
-
-.target {
-  font-size: 12px;
-  color: var(--text-3);
-}
-</style>

@@ -28,73 +28,38 @@ function submit(): void {
 </script>
 
 <template>
-  <form class="form-row" data-noprint @submit.prevent="submit">
+  <form class="flex flex-wrap items-center gap-2 pt-4" data-noprint @submit.prevent="submit">
     <input
       v-model="name"
-      class="field field-grow"
+      class="field min-w-0 flex-[1_1_220px]"
       placeholder="New exercise"
       aria-label="New exercise name"
     />
     <input
       :value="reps"
-      class="field reps"
+      class="field w-24"
       placeholder="Reps"
       inputmode="numeric"
       aria-label="Reps"
       @input="onRepsInput"
     />
-    <div class="segmented" role="group" aria-label="Reps count">
+    <div
+      class="flex h-9 rounded-lg border border-line bg-subtle p-0.5"
+      role="group"
+      aria-label="Reps count"
+    >
       <button
         type="button"
-        class="seg"
-        :class="{ selected: !perSide }"
+        class="segment px-2.5"
         :aria-pressed="!perSide"
         @click="perSide = false"
       >
         per set
       </button>
-      <button
-        type="button"
-        class="seg"
-        :class="{ selected: perSide }"
-        :aria-pressed="perSide"
-        @click="perSide = true"
-      >
+      <button type="button" class="segment px-2.5" :aria-pressed="perSide" @click="perSide = true">
         each side, per set
       </button>
     </div>
     <button type="submit" class="btn-primary">Add Exercise</button>
   </form>
 </template>
-
-<style scoped>
-/* .field is content-box, so 70px renders as the prototype's 92px reps box. */
-.reps {
-  width: 70px;
-}
-
-.segmented {
-  display: flex;
-  background: var(--window);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 2px;
-  gap: 2px;
-}
-
-.seg {
-  height: 26px;
-  padding: 0 10px;
-  border: none;
-  border-radius: 5px;
-  font-size: 12px;
-  font-weight: 500;
-  background: transparent;
-  color: var(--text-2);
-}
-
-.seg.selected {
-  background: var(--border-strong);
-  color: var(--text);
-}
-</style>

@@ -5,57 +5,18 @@ const store = usePlannerStore()
 </script>
 
 <template>
-  <section class="heading">
-    <div class="left">
-      <h1>{{ store.label }}</h1>
-      <div class="sub">
+  <section class="flex flex-wrap items-end justify-between gap-3 pt-8 pb-2 print:pt-0">
+    <div class="flex flex-col gap-1">
+      <h1 class="text-3xl font-bold tracking-tight">{{ store.label }}</h1>
+      <p class="text-sm text-muted" data-testid="pick-hint">
         Pick {{ store.dailyPick }} exercises a day. Click a cell when it’s done.
-      </div>
+      </p>
     </div>
-    <div class="total">
-      <div class="mono value" data-testid="grand-total">{{ store.grandTotal }}</div>
-      <div class="sub">sessions this week</div>
+    <div class="flex items-baseline gap-1.5">
+      <div class="font-mono text-3xl font-semibold text-accent-fg" data-testid="grand-total">
+        {{ store.grandTotal }}
+      </div>
+      <div class="text-sm text-muted">sessions this week</div>
     </div>
   </section>
 </template>
-
-<style scoped>
-.heading {
-  padding: 28px 28px 8px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.left {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-h1 {
-  margin: 0;
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -0.025em;
-}
-
-.sub {
-  font-size: 13px;
-  color: var(--text-2);
-}
-
-.total {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.value {
-  font-size: 30px;
-  font-weight: 600;
-  color: var(--accent);
-}
-</style>

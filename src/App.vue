@@ -1,18 +1,29 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, watchEffect } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watchEffect } from 'vue'
 import { usePlannerStore } from '@/stores/planner'
-import TitleBar from '@/components/TitleBar.vue'
+import AppNavbar from '@/components/AppNavbar.vue'
 import WeekHeader from '@/components/WeekHeader.vue'
 import ExerciseGrid from '@/components/ExerciseGrid.vue'
 import AddExerciseForm from '@/components/AddExerciseForm.vue'
 import DietSection from '@/components/DietSection.vue'
 import { useDietStore } from '@/stores/diet'
+import { isDark } from '@/lib/theme'
 
 const store = usePlannerStore()
 const diet = useDietStore()
 
 // The accent is a user setting, so it lives in a CSS variable rather than in the stylesheets.
 watchEffect(() => document.documentElement.style.setProperty('--accent', store.accent))
+
+// matchMedia is missing in some environments (jsdom), so "System" falls back to light there.
+const colorScheme = window.matchMedia?.('(prefers-color-scheme: dark)')
+const systemDark = ref(colorScheme?.matches ?? false)
+watchEffect(() =>
+  document.documentElement.classList.toggle('dark', isDark(store.theme, systemDark.value)),
+)
+function onColorScheme(ev: MediaQueryListEvent): void {
+  systemDark.value = ev.matches
+}
 
 function onVisible(): void {
   if (document.visibilityState === 'visible') store.refreshNow()
@@ -29,49 +40,23 @@ let tick: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   document.addEventListener('visibilitychange', onVisible)
   window.addEventListener('storage', onStorage)
+  colorScheme?.addEventListener('change', onColorScheme)
   tick = setInterval(store.refreshNow, 60_000)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onVisible)
   window.removeEventListener('storage', onStorage)
+  colorScheme?.removeEventListener('change', onColorScheme)
   clearInterval(tick)
 })
 </script>
 
 <template>
-  <div class="page">
-    <main class="window" data-window>
-      <TitleBar />
-      <WeekHeader />
-      <ExerciseGrid />
-      <AddExerciseForm />
-      <DietSection />
-    </main>
-  </div>
+  <AppNavbar />
+  <main class="mx-auto max-w-6xl px-4 pb-16 sm:px-6 lg:px-8 print:max-w-none print:p-0">
+    <WeekHeader />
+    <ExerciseGrid />
+    <AddExerciseForm />
+    <DietSection />
+  </main>
 </template>
-
-<style scoped>
-.page {
-  min-height: 100vh;
-  padding: 40px 24px 64px;
-  background: radial-gradient(1200px 600px at 50% -10%, #26262a, var(--bg-page));
-}
-
-@media (max-width: 600px) {
-  .page {
-    padding: 16px 12px 32px;
-  }
-}
-
-.window {
-  max-width: 1120px;
-  margin: 0 auto;
-  background: var(--window);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.55),
-    0 0 0 0.5px rgba(0, 0, 0, 0.8);
-}
-</style>

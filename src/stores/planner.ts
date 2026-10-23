@@ -18,6 +18,7 @@ import {
   type Log,
 } from '@/lib/storage'
 import * as tracker from '@/lib/tracker'
+import type { Theme } from '@/lib/theme'
 
 export type Day = { name: string; date: string; key: string; isToday: boolean }
 
@@ -37,6 +38,7 @@ export const usePlannerStore = defineStore('planner', () => {
   const weekOffset = ref(0)
   const accent = ref(settings.accent)
   const dailyPick = ref(settings.dailyPick)
+  const theme = ref<Theme>(settings.theme)
   /** "Now" as a ref so the today column moves when the tab is revisited after midnight. */
   const now = ref(new Date())
 
@@ -124,6 +126,7 @@ export const usePlannerStore = defineStore('planner', () => {
       const fresh = parseSettings(readKey(SETTINGS_KEY))
       accent.value = fresh.accent
       dailyPick.value = fresh.dailyPick
+      theme.value = fresh.theme
     }
   }
 
@@ -133,6 +136,9 @@ export const usePlannerStore = defineStore('planner', () => {
   function changeDailyPick(delta: number): void {
     dailyPick.value = clamp(dailyPick.value + delta, MIN_DAILY_PICK, MAX_DAILY_PICK)
   }
+  function setTheme(next: Theme): void {
+    theme.value = next
+  }
 
   watch(
     [exercises, log],
@@ -141,8 +147,12 @@ export const usePlannerStore = defineStore('planner', () => {
       deep: true,
     },
   )
-  watch([accent, dailyPick], () =>
-    writeKey(SETTINGS_KEY, { accent: accent.value, dailyPick: dailyPick.value }),
+  watch([accent, dailyPick, theme], () =>
+    writeKey(SETTINGS_KEY, {
+      accent: accent.value,
+      dailyPick: dailyPick.value,
+      theme: theme.value,
+    }),
   )
 
   return {
@@ -151,6 +161,7 @@ export const usePlannerStore = defineStore('planner', () => {
     weekOffset,
     accent,
     dailyPick,
+    theme,
     now,
     monday,
     weekKey,
@@ -171,5 +182,6 @@ export const usePlannerStore = defineStore('planner', () => {
     syncFromStorage,
     setAccent,
     changeDailyPick,
+    setTheme,
   }
 })

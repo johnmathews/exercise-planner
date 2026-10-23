@@ -1,3 +1,5 @@
+import { isTheme, type Theme } from '@/lib/theme'
+
 export type Exercise = {
   id: string
   name: string
@@ -21,7 +23,7 @@ export type PlannerData = { exercises: Exercise[]; log: Log }
 
 export type DietData = { foods: Food[]; log: Log }
 
-export type Settings = { accent: string; dailyPick: number }
+export type Settings = { accent: string; dailyPick: number; theme: Theme }
 
 /** Same key and shape as the design prototype, so its saved data carries over on the same origin. */
 export const DATA_KEY = 'exercise-planner-v1'
@@ -37,7 +39,7 @@ export const MAX_DAILY_PICK = 8
 export const NEW_EXERCISE_TARGET = 3
 export const NEW_FOOD_TARGET = 3
 
-export const DEFAULT_SETTINGS: Settings = { accent: '#30d158', dailyPick: 3 }
+export const DEFAULT_SETTINGS: Settings = { accent: '#30d158', dailyPick: 3, theme: 'system' }
 
 export function defaultExercises(): Exercise[] {
   return [
@@ -152,7 +154,8 @@ export function parseSettings(raw: string | null): Settings {
     MIN_DAILY_PICK,
     MAX_DAILY_PICK,
   )
-  return { accent, dailyPick }
+  const theme = isTheme(parsed.theme) ? parsed.theme : DEFAULT_SETTINGS.theme
+  return { accent, dailyPick, theme }
 }
 
 /** `localStorage` can throw (private mode, blocked site data); the app must still run. */

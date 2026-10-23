@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, useId } from 'vue'
 import { usePlannerStore } from '@/stores/planner'
 import { ACCENTS, MAX_DAILY_PICK, MIN_DAILY_PICK } from '@/lib/storage'
+import { THEMES, type Theme } from '@/lib/theme'
 import NumberStepper from '@/components/NumberStepper.vue'
 
 const ACCENT_NAMES: Record<string, string> = {
@@ -11,11 +12,14 @@ const ACCENT_NAMES: Record<string, string> = {
   '#bf5af2': 'Purple',
 }
 
+const THEME_NAMES: Record<Theme, string> = { system: 'System', light: 'Light', dark: 'Dark' }
+
 const store = usePlannerStore()
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
 const panelId = useId()
+const LABEL = 'text-[11px] font-semibold tracking-wider text-muted uppercase'
 
 function onPointerDown(ev: PointerEvent): void {
   if (open.value && root.value && !root.value.contains(ev.target as Node)) open.value = false
@@ -38,26 +42,48 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="root" class="settings" data-noprint>
+  <div ref="root" class="relative" data-noprint>
     <button
       ref="trigger"
       type="button"
-      class="trigger"
+      class="btn aria-expanded:bg-subtle"
       :aria-expanded="open"
       :aria-controls="panelId"
       @click="open = !open"
     >
-      <span class="dot" aria-hidden="true" />Settings
+      <span class="size-2 rounded-full bg-accent" aria-hidden="true" />Settings
     </button>
-    <div v-if="open" :id="panelId" class="panel" role="group" aria-label="Settings">
-      <div class="label">Accent</div>
-      <div class="swatches" role="group" aria-label="Accent colour">
+    <div
+      v-if="open"
+      :id="panelId"
+      class="absolute top-full right-0 z-30 mt-2 flex w-60 flex-col gap-2 rounded-xl border border-line bg-surface p-3 shadow-lg"
+      role="group"
+      aria-label="Settings"
+    >
+      <div :class="LABEL">Appearance</div>
+      <div
+        class="mb-1 flex rounded-lg border border-line bg-subtle p-0.5"
+        role="group"
+        aria-label="Theme"
+      >
+        <button
+          v-for="t in THEMES"
+          :key="t"
+          type="button"
+          class="segment h-7 flex-1"
+          :aria-pressed="store.theme === t"
+          @click="store.setTheme(t)"
+        >
+          {{ THEME_NAMES[t] }}
+        </button>
+      </div>
+      <div :class="LABEL">Accent</div>
+      <div class="flex gap-2.5 px-0.5 pt-0.5 pb-1.5" role="group" aria-label="Accent colour">
         <button
           v-for="c in ACCENTS"
           :key="c"
           type="button"
-          class="swatch"
-          :class="{ selected: store.accent === c }"
+          class="size-5.5 rounded-full ring-offset-2 ring-offset-surface aria-pressed:ring-2 aria-pressed:ring-fg"
           :style="{ background: c }"
           :aria-pressed="store.accent === c"
           :aria-label="ACCENT_NAMES[c]"
@@ -65,9 +91,11 @@ onBeforeUnmount(() => {
           @click="store.setAccent(c)"
         />
       </div>
-      <div class="label">Exercises per day</div>
-      <div class="pick-row">
-        <span class="mono pick-value" aria-live="polite">{{ store.dailyPick }}</span>
+      <div :class="LABEL">Exercises per day</div>
+      <div class="flex items-center justify-between">
+        <span class="font-mono text-xl font-semibold" aria-live="polite" data-testid="daily-pick">
+          {{ store.dailyPick }}
+        </span>
         <NumberStepper
           :value="store.dailyPick"
           :min="MIN_DAILY_PICK"
@@ -82,90 +110,3 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
-
-<style scoped>
-.settings {
-  position: relative;
-}
-
-.trigger {
-  height: 28px;
-  padding: 0 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--border);
-  background: var(--border);
-  color: var(--text);
-  border-radius: 7px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.trigger:hover,
-.trigger[aria-expanded='true'] {
-  background: var(--border-strong);
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
-.panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 10;
-  width: 200px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: var(--toolbar);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-}
-
-.label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-2);
-}
-
-.swatches {
-  display: flex;
-  gap: 10px;
-  padding: 2px 2px 6px;
-}
-
-.swatch {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: none;
-  padding: 0;
-}
-
-.swatch.selected {
-  box-shadow:
-    0 0 0 2px var(--toolbar),
-    0 0 0 4px var(--text);
-}
-
-.pick-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.pick-value {
-  font-size: 20px;
-  font-weight: 600;
-}
-</style>

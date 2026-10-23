@@ -41,12 +41,12 @@ describe('DietSection', () => {
     expect(wrapper.get('#diet-heading').text()).toBe('Diet')
     expect(
       diet()
-        .findAll('[role="rowheader"] .name')
+        .findAll('[data-testid="item-name"]')
         .map((n) => n.text()),
     ).toEqual(['Vegetables', 'Fruit', 'Fish', 'Nuts'])
-    expect(diet().findAll('.chip')).toHaveLength(0)
+    expect(diet().findAll('[data-testid="item-detail"]')).toHaveLength(0)
     expect(diet().get('[role="columnheader"]').text()).toBe('Food')
-    expect(diet().findAll('.day-head')[4]!.classes()).toContain('today')
+    expect(diet().findAll('[data-testid="day-head"]')[4]!.attributes('data-today')).toBe('true')
   })
 
   it('ticks a food, updating its total, the footer, and goals met', async () => {
@@ -58,11 +58,11 @@ describe('DietSection', () => {
     expect(cells('Fish')[2]!.attributes('aria-pressed')).toBe('true')
     const total = diet().findAll('[data-testid="row-total"]')[2]!
     expect(total.text()).toBe('2 / 2')
-    expect(total.classes()).toContain('met')
+    expect(total.attributes('data-met')).toBe('true')
     const counts = diet().findAll('[data-testid="day-count"]')
     expect(counts.map((c) => c.text())).toEqual(['1', '0', '1', '0', '0', '0', '0'])
-    expect(counts[0]!.classes()).toContain('plain')
-    expect(counts[1]!.classes()).toContain('under')
+    expect(counts[0]!.attributes('data-tone')).toBe('plain')
+    expect(counts[1]!.attributes('data-tone')).toBe('under')
     expect(goals()).toBe('1 / 4')
     // The exercise totals are untouched.
     expect(wrapper.get('[data-testid="grand-total"]').text()).toBe('0')
@@ -81,7 +81,7 @@ describe('DietSection', () => {
     mountApp()
     await wrapper.get('input[aria-label="New food name"]').setValue('Beans')
     await wrapper.get('input[aria-label="New food name"]').trigger('submit')
-    expect(diet().findAll('[role="rowheader"] .name').at(-1)!.text()).toBe('Beans')
+    expect(diet().findAll('[data-testid="item-name"]').at(-1)!.text()).toBe('Beans')
     expect(
       (wrapper.get('input[aria-label="New food name"]').element as HTMLInputElement).value,
     ).toBe('')
@@ -117,7 +117,7 @@ describe('DietSection', () => {
     await wrapper.vm.$nextTick()
     expect(
       diet()
-        .findAll('[role="rowheader"] .name')
+        .findAll('[data-testid="item-name"]')
         .map((n) => n.text()),
     ).toEqual(['Quinoa'])
   })
