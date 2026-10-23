@@ -15,8 +15,9 @@
 - **Diet.** Below the exercises, foods work the same way: tick each day you ate one, and its Week
   column counts days against a goal. The section header shows how many food goals are met. Defaults
   are Vegetables (7), Fruit (5), Fish (2) and Nuts (3).
-- Add an exercise with a name, an optional rep count, and "per set" or "each side, per set"; add a
-  food by name. New items start with a goal of 3. `×` removes one after a confirmation (its history
+- Add an exercise with a name, an optional rep count, "per set" or "each side, per set", and an
+  optional weight in kg (e.g. squats with a 12 kg kettlebell); add a food by name. New items start
+  with a goal of 3. `✎` edits an exercise; `×` removes an item after a confirmation (its history
   stays stored).
 - `‹` / `›` move between weeks for both sections; past weeks persist. **Print…** produces a
   black-on-white sheet.

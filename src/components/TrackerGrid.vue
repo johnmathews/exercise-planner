@@ -11,7 +11,9 @@ defineProps<{
   days: Day[]
   flagsFor: (id: string) => boolean[]
   totalFor: (id: string) => number
-  detailFor?: (item: Tracked) => string
+  detailsFor?: (item: Tracked) => string[]
+  /** Adds an edit button to each row, which emits `edit`. */
+  editable?: boolean
   footerLabel: string
   counts: { text: string; tone: CountTone }[]
   grandTotal: number
@@ -31,6 +33,7 @@ defineEmits<{
   toggle: [id: string, day: number]
   changeTarget: [id: string, delta: number]
   remove: [id: string]
+  edit: [id: string]
 }>()
 </script>
 
@@ -75,13 +78,15 @@ defineEmits<{
         v-for="it in items"
         :key="it.id"
         :item="it"
-        :detail="detailFor?.(it)"
+        :details="detailsFor?.(it)"
+        :editable="editable"
         :days="days"
         :flags="flagsFor(it.id)"
         :total="totalFor(it.id)"
         @toggle="$emit('toggle', it.id, $event)"
         @change-target="$emit('changeTarget', it.id, $event)"
         @remove="$emit('remove', it.id)"
+        @edit="$emit('edit', it.id)"
       />
 
       <div role="row" class="contents">

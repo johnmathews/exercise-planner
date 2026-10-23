@@ -8,13 +8,21 @@ import NumberStepper from '@/components/NumberStepper.vue'
 
 const props = defineProps<{
   item: Tracked
-  /** Small chip under the name, e.g. "10 reps / set". Omitted for foods. */
-  detail?: string
+  /** Small chips under the name, e.g. "10 reps / set" and "12 kg". Omitted for foods. */
+  details?: string[]
+  /** Shows an edit button that emits `edit`. */
+  editable?: boolean
   days: Day[]
   flags: boolean[]
   total: number
 }>()
-const emit = defineEmits<{ toggle: [day: number]; changeTarget: [delta: number]; remove: [] }>()
+const emit = defineEmits<{
+  toggle: [day: number]
+  changeTarget: [delta: number]
+  remove: []
+  edit: []
+}>()
+const ICON_BUTTON = 'size-6 shrink-0 rounded-md text-faint hover:bg-subtle hover:text-fg'
 
 const met = computed(() => goalMet(props.total, props.item.target))
 
@@ -34,18 +42,31 @@ function remove(): void {
         <div class="text-sm font-semibold tracking-tight" data-testid="item-name">
           {{ item.name }}
         </div>
-        <div v-if="detail" class="flex">
+        <div v-if="details?.length" class="flex flex-wrap gap-1">
           <span
+            v-for="d in details"
+            :key="d"
             class="rounded border border-line bg-subtle px-1.5 py-px font-mono text-[11px] whitespace-nowrap text-muted"
             data-testid="item-detail"
           >
-            {{ detail }}
+            {{ d }}
           </span>
         </div>
       </div>
       <button
+        v-if="editable"
         type="button"
-        class="size-6 shrink-0 rounded-md text-faint hover:bg-subtle hover:text-fg"
+        :class="ICON_BUTTON"
+        title="Edit"
+        :aria-label="`Edit ${item.name}`"
+        data-noprint
+        @click="emit('edit')"
+      >
+        ✎
+      </button>
+      <button
+        type="button"
+        :class="ICON_BUTTON"
         title="Remove"
         :aria-label="`Remove ${item.name}`"
         data-noprint

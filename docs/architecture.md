@@ -15,7 +15,9 @@ the pure helpers in `src/lib/tracker.ts`. `src/lib/dates.ts` holds the week math
 
 `TrackerGrid`, `TrackerRow`, `DayCell` and `NumberStepper` take props, emit events, and serve both
 sections; `TrackerRow` also asks `window.confirm` before emitting `remove`. `ExerciseGrid` and
-`DietSection` wire them to their store.
+`DietSection` wire them to their store. `AddExerciseForm` and `EditExerciseDialog` share their field
+state and input cleaning through `useExerciseForm` (`src/composables/exerciseForm.ts`) and the
+`PerSideToggle` segmented control.
 
 ```
 App.vue                 navbar + main column, --accent variable, .dark class, clock refresh,
@@ -23,11 +25,12 @@ App.vue                 navbar + main column, --accent variable, .dark class, cl
 ├── AppNavbar.vue       sticky top bar: app name, ‹ This Week ›, Settings, Print…
 │   └── SettingsPopover.vue   theme (System/Light/Dark), accent swatches, exercises-per-day stepper
 ├── WeekHeader.vue      H1 week label, daily-pick hint, grand total
-├── ExerciseGrid.vue    wires planner to a TrackerGrid: reps chips, "Picked / N" footer
-│   └── TrackerGrid.vue CSS grid: header row, one TrackerRow per item, footer counts
-│       └── TrackerRow.vue  name (+ optional chip), × remove (confirms), 7 × DayCell,
-│                           total + goal NumberStepper
-├── AddExerciseForm.vue name, digits-only reps, "per set" | "each side, per set", Add Exercise
+├── ExerciseGrid.vue    wires planner to a TrackerGrid: reps/weight chips, edit, "Picked / N" footer
+│   ├── TrackerGrid.vue CSS grid: header row, one TrackerRow per item, footer counts
+│   │   └── TrackerRow.vue  name (+ optional chips), ✎ edit (if editable), × remove (confirms),
+│   │                       7 × DayCell, total + goal NumberStepper
+│   └── EditExerciseDialog.vue  native modal: name, reps, PerSideToggle, weight; Cancel / Save
+├── AddExerciseForm.vue name, digits-only reps, PerSideToggle, optional weight (kg), Add Exercise
 └── DietSection.vue     "Diet" heading with goals met
     ├── TrackerGrid.vue wired to diet: no chips, neutral "Eaten" footer
     └── AddFoodForm.vue name, Add Food
@@ -39,7 +42,7 @@ App.vue                 navbar + main column, --accent variable, .dark class, cl
 
 | State                 | Persisted                      | Notes                                                   |
 | --------------------- | ------------------------------ | ------------------------------------------------------- |
-| `exercises`           | `exercise-planner-v1`          | `{ id, name, reps, perSide?, target }`                  |
+| `exercises`           | `exercise-planner-v1`          | `{ id, name, reps, perSide?, weight?, target }`         |
 | `log`                 | `exercise-planner-v1`          | week Monday `YYYY-MM-DD` → exercise id → seven booleans |
 | `accent`, `dailyPick` | `exercise-planner-settings-v1` | defaults `#30d158`, `3`                                 |
 | `theme`               | `exercise-planner-settings-v1` | `system` (default), `light` or `dark`                   |
@@ -51,9 +54,11 @@ App.vue                 navbar + main column, --accent variable, .dark class, cl
 still exist, so a removed exercise's history stays in `log` without inflating the numbers.
 
 **Actions:** `toggle`, `changeTarget` (clamps 0–7), `addExercise` (returns `false` for an empty
-name; new exercises get goal 3), `removeExercise`, `prevWeek`, `nextWeek`, `thisWeek`, `refreshNow`,
-`syncFromStorage`, `setAccent`, `changeDailyPick` (clamps 1–8), `setTheme`. The module also exports `repsLabel`,
-which renders "10 reps / set", "8 each side / set" or "—".
+name; new exercises get goal 3), `updateExercise` (replaces name, reps, per-side and weight, keeping
+the id, goal and history; `false` for an empty name or unknown id), `removeExercise`, `prevWeek`,
+`nextWeek`, `thisWeek`, `refreshNow`, `syncFromStorage`, `setAccent`, `changeDailyPick` (clamps
+1–8), `setTheme`. The module also exports `exerciseDetails`, which gives the chips under a name:
+"10 reps / set" or "8 each side / set", then "12 kg" when a weight is set, or "—" for neither.
 
 `useDietStore` holds `foods` (`{ id, name, target }`) and its own `log`, persisted together under
 `exercise-planner-diet-v1`. It reads `planner.weekKey`, so week navigation moves both sections. It
@@ -78,6 +83,8 @@ the exercise payload stays prototype-compatible.
 
 - Anything that is not a JSON object yields the five default exercises and an empty log.
 - `exercises` that is not an array restores the defaults; an empty array stays empty.
+- `weight` (kg) is kept only when it is a positive number, rounded to 2 decimals and capped at 500;
+  otherwise the key is left out, so prototype data never gains one.
 - Entries without a string `id` and `name` drop out; `reps` rounds and floors at 0; `target` rounds
   and clamps to 0–7, defaulting to 3.
 - Log weeks whose key is not `YYYY-MM-DD`, and entries that are not arrays, drop out; the rest
@@ -107,9 +114,15 @@ otherwise. Settings saved before the theme option existed load as `system`.
   does not flash light while the bundle loads. It is a plain file rather than an inline script
   because the nginx CSP allows scripts only from `'self'`.
 - **Settings popover.** The handoff calls accent and daily pick user settings but shows no UI for
-  them; the popover adds one, plus the theme. The default accent is green (`#30d158`), which the handoff records as
-  the user's pick. It is a disclosure: an outside click or Escape closes it, and Escape returns
-  focus to the trigger. Swatches, the theme buttons and the per-set toggle are `aria-pressed` buttons.
+  them; the popover adds one, plus the theme. The default accent is green (`#30d158`), which the
+  handoff records as the user's pick. It is a disclosure: an outside click or Escape closes it, and
+  Escape returns focus to the trigger. Swatches, the theme buttons and the per-set toggle are
+  `aria-pressed` buttons.
+- **Exercises are editable.** The handoff had no way to change an exercise after adding it. A ✎
+  button on each exercise row (not foods) opens `EditExerciseDialog`, a native `<dialog>` opened
+  with `showModal()`, which traps focus, closes on Escape and returns focus to the button. The
+  weight is optional and in kg; reps and weight show as separate chips so they wrap in the narrow
+  name column.
 - **Steppers mark their bounds** (goal 0/7, daily pick 1/8) with `aria-disabled` and ignore the
   click there. `disabled` would drop keyboard focus mid-press. The store still clamps as a backstop.
 - **Today refreshes.** A one-minute tick and `visibilitychange` both call `refreshNow`, which

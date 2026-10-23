@@ -5,6 +5,8 @@ export type Exercise = {
   name: string
   reps: number
   perSide?: boolean
+  /** Load in kg (e.g. a 12 kg kettlebell); absent for bodyweight exercises. */
+  weight?: number
   /** Weekly goal in days, 0–7. */
   target: number
 }
@@ -37,6 +39,7 @@ export const MAX_TARGET = 7
 export const MIN_DAILY_PICK = 1
 export const MAX_DAILY_PICK = 8
 export const NEW_EXERCISE_TARGET = 3
+export const MAX_WEIGHT = 500
 export const NEW_FOOD_TARGET = 3
 
 export const DEFAULT_SETTINGS: Settings = { accent: '#30d158', dailyPick: 3, theme: 'system' }
@@ -81,15 +84,26 @@ function parseJson(raw: string | null): unknown {
   }
 }
 
+/** A usable weight in kg, rounded to 2 decimals and capped; `undefined` means "no weight". */
+export function normaliseWeight(v: unknown): number | undefined {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return undefined
+  // Round before the sign check, so a tiny value like 0.004 can't come out as 0.
+  const kg = Math.round(v * 100) / 100
+  return kg > 0 ? Math.min(MAX_WEIGHT, kg) : undefined
+}
+
 function normaliseExercise(v: unknown): Exercise | null {
   if (!isRecord(v) || typeof v.id !== 'string' || typeof v.name !== 'string') return null
   // Key order and an explicit `perSide: false` both follow the prototype, so its saved data
-  // re-serialises byte for byte and loading it never triggers a rewrite.
+  // re-serialises byte for byte and loading it never triggers a rewrite. `weight` is ours and only
+  // appears when set, so prototype data never gains one.
+  const weight = normaliseWeight(v.weight)
   return {
     id: v.id,
     name: v.name,
     reps: Math.max(0, toInt(v.reps, 0)),
     ...(typeof v.perSide === 'boolean' ? { perSide: v.perSide } : {}),
+    ...(weight !== undefined ? { weight } : {}),
     target: clamp(toInt(v.target, NEW_EXERCISE_TARGET), MIN_TARGET, MAX_TARGET),
   }
 }
