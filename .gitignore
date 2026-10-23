@@ -17,3 +17,10 @@ playwright-report/
 __screenshots__/
 *.timestamp-*-*.mjs
 .playwright-mcp/
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials.json
+*.secret
