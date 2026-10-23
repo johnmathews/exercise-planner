@@ -35,7 +35,33 @@ cells. At 390px the grid scrolls sideways as designed. The container served the 
 - The scaffold's `tsconfig.vitest.json` had `"lib": []`, which hid `Array.prototype.at`; it now
   lists `ES2023` and the DOM libs.
 
-## 5. Open
+## 5. Review round (wrap-up)
 
-- No sync or backup; data is per-browser and per-origin.
-- No end-to-end browser tests in CI; the component suite runs in jsdom.
+An independent code review and a separate docs-versus-code audit ran before merge. Changes made:
+
+- **Cross-tab overwrite (Medium, confirmed by reading the code):** a stale tab wrote its whole
+  state back and erased another tab's edits. `App.vue` now listens for `storage` events, and
+  `writeKey` skips unchanged values so adopting a write never echoes it back.
+- **Prototype byte-compatibility (confirmed by test):** normalisation dropped the prototype's
+  `perSide: false` and reordered keys. Both now follow the prototype, and a test asserts an exact
+  string round-trip.
+- **Midnight in a visible tab:** a one-minute tick now backs up `visibilitychange`.
+- **Accessibility:** steppers use `aria-disabled` (keeps focus), the popover returns focus on
+  Escape, and the radio-role buttons became `aria-pressed` toggles.
+- **Duplication:** one `NumberStepper` replaces two copies of the stepper markup and CSS.
+- **nginx:** gzip, `nosniff`, `no-referrer` and a CSP, all set at server level via a `map`. In a
+  browser against the container, the CSP produced no console errors and inline accent styles
+  still applied (confirmed).
+- **Workflow permissions:** PR builds hold `contents: read` only; `packages: write` exists only in
+  the `main` publish job. Checkouts set `persist-credentials: false`.
+- **Docs:** 15 audit findings fixed, mostly overstatements (e.g. "end to end" for jsdom tests,
+  "type-checks before bundling" for a parallel run) and gaps (scripts, actions, validation rules).
+
+## 6. What is deliberately not done
+
+- **No sync or backup.** Data is per-browser and per-origin; the handoff names sync as a future
+  option, and it needs a backend this build avoids.
+- **No end-to-end browser tests in CI.** The jsdom suite covers behaviour; the visual comparison
+  was a one-off manual check. Playwright in CI would cost more than the app's size justifies today.
+- **No real radio-group keyboard pattern.** Toggle buttons were chosen over `role="radio"` with
+  roving tabindex: the groups have two to four options, and Tab reaches each.

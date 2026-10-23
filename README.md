@@ -22,18 +22,21 @@ docker run -p 8080:8080 ghcr.io/johnmathews/exercise-planner:latest
 ## 2. What it does
 
 - Each day, pick a few exercises (default three) and click their cells when done.
-- The **Week** column counts sessions per exercise against a weekly goal of 0–7 days.
+- The **Week** column counts sessions per exercise against a weekly goal of 0–7 days; the count
+  turns accent-coloured once a non-zero goal is met.
 - The footer counts picks per day: accent when the daily target is met, orange when over.
+- Add an exercise with a name, an optional rep count, and "per set" or "each side, per set"; new
+  exercises start with a goal of 3. `×` removes one after a confirmation (its history stays stored).
 - `‹` / `›` move between weeks; past weeks persist. **Print…** produces a black-on-white sheet.
 - **Settings** sets the accent colour and the daily pick (1–8).
 
 ## 3. Documentation
 
-| Doc | Covers |
-| --- | --- |
-| [docs/architecture.md](docs/architecture.md) | Components, store, storage format, design decisions |
-| [docs/development.md](docs/development.md) | Toolchain, scripts, tests, conventions |
-| [docs/deployment.md](docs/deployment.md) | Docker image, nginx, CI, GHCR publishing |
-| [design_handoff_exercise_planner/](design_handoff_exercise_planner/README.md) | The original design spec and HTML prototype |
+| Doc                                                                           | Covers                                              |
+| ----------------------------------------------------------------------------- | --------------------------------------------------- |
+| [docs/architecture.md](docs/architecture.md)                                  | Components, store, storage format, design decisions |
+| [docs/development.md](docs/development.md)                                    | Toolchain, scripts, conventions, tests              |
+| [docs/deployment.md](docs/deployment.md)                                      | Docker image, nginx, CI, GHCR publishing            |
+| [design_handoff_exercise_planner/](design_handoff_exercise_planner/README.md) | The original design spec and HTML prototype         |
 
 Development history lives in [`journal/`](journal/).

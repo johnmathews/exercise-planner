@@ -8,49 +8,63 @@
 ## 1. Overview
 
 A static Vue 3 SPA with no backend. One Pinia store (`src/stores/planner.ts`) holds all state,
-derives everything the view shows, and writes changes back to `localStorage`. Components read
-the store directly; none of them keep domain state of their own.
+derives everything the view shows, and writes changes back to `localStorage`. Container
+components read the store; `DayCell` and `NumberStepper` are props-in, events-out.
 
 ```
-App.vue                 page background, window, --accent variable, visibility refresh
+App.vue                 page, window, --accent variable, clock refresh, cross-tab sync
 ├── TitleBar.vue        traffic lights, week label, ‹ This Week ›, Settings, Print…
-│   └── SettingsPopover.vue   accent swatches, exercises-per-day stepper
+│   └── SettingsPopover.vue   accent swatches, exercises-per-day NumberStepper
 ├── WeekHeader.vue      H1 week label, daily-pick hint, grand total
 ├── PlannerGrid.vue     CSS grid: header row, rows, footer counts
-│   └── ExerciseRow.vue name + reps chip, 7 × DayCell, total + GoalStepper
-└── AddExerciseForm.vue name, digits-only reps, per set / each side, submit
+│   └── ExerciseRow.vue name + reps chip, 7 × DayCell, total + goal NumberStepper
+└── AddExerciseForm.vue name, digits-only reps, "per set" | "each side, per set", Add Exercise
 ```
 
 ## 2. Store
 
 `usePlannerStore` is a setup store.
 
-| State | Persisted | Notes |
-| --- | --- | --- |
-| `exercises` | `exercise-planner-v1` | `{ id, name, reps, perSide?, target }` |
-| `log` | `exercise-planner-v1` | week Monday `YYYY-MM-DD` → exercise id → seven booleans |
-| `accent`, `dailyPick` | `exercise-planner-settings-v1` | defaults `#30d158`, `3` |
-| `weekOffset` | no | `0` is the current week |
-| `now` | no | a ref so "today" can move; see §4 |
+| State                 | Persisted                      | Notes                                                   |
+| --------------------- | ------------------------------ | ------------------------------------------------------- |
+| `exercises`           | `exercise-planner-v1`          | `{ id, name, reps, perSide?, target }`                  |
+| `log`                 | `exercise-planner-v1`          | week Monday `YYYY-MM-DD` → exercise id → seven booleans |
+| `accent`, `dailyPick` | `exercise-planner-settings-v1` | defaults `#30d158`, `3`                                 |
+| `weekOffset`          | no                             | `0` is the current week                                 |
+| `now`                 | no                             | a ref so "today" can move; see §4                       |
 
-Derived values: `monday`, `weekKey`, `label`, `days` (name, date, key, `isToday`), `dayCounts`,
+**Derived:** `monday`, `weekKey`, `label`, `days` (name, date, key, `isToday`), `dayCounts`,
 `grandTotal`, and the helpers `isDone(id, day)` and `totalFor(id)`. Totals count only exercises
 that still exist, so a removed exercise's history stays in `log` without inflating the numbers.
 
-Two deep watchers persist the data and the settings under separate keys. Each write runs in a
-`try`/`catch`: with storage blocked or full, the app keeps working in memory.
+**Actions:** `toggle`, `changeTarget` (clamps 0–7), `addExercise` (returns `false` for an empty
+name; new exercises get goal 3), `removeExercise`, `prevWeek`, `nextWeek`, `thisWeek`,
+`refreshNow`, `syncFromStorage`, `setAccent`, `changeDailyPick` (clamps 1–8). The module also
+exports `repsLabel`, which renders "10 reps / set", "8 each side / set" or "—".
 
-## 3. Storage compatibility
+Two watchers persist state: a deep one for `{ exercises, log }` and a shallow one for the
+settings. `writeKey` skips the write when the stored string already matches, and swallows
+storage errors, so with storage blocked or full the app keeps working in memory.
 
-`exercise-planner-v1` uses the same key and shape as the design prototype, so data saved by the
-prototype loads unchanged on the same origin (browsers isolate storage per origin, so data does
-not move between hosts). Settings live under a second key so that the data payload stays
-byte-compatible with the prototype.
+## 3. Storage format and validation
 
-`parsePlannerData` (`src/lib/storage.ts`) validates the stored payload field by field instead of
-trusting it. Invalid JSON yields the defaults; a missing `exercises` restores the five default
-exercises; a malformed `log` becomes `{}`; bad exercises drop out; goals clamp to 0–7; log arrays
-normalise to exactly seven booleans. The prototype crashed outright on a payload without `log`.
+`exercise-planner-v1` uses the prototype's key, shape and key order, including its explicit
+`perSide: false`, so prototype data on the same origin loads and re-serialises byte for byte.
+Browsers isolate storage per origin, so data does not move between hosts. Settings live under a
+second key so the data payload stays prototype-compatible.
+
+`parsePlannerData` (`src/lib/storage.ts`) validates the stored payload field by field:
+
+- Anything that is not a JSON object yields the five default exercises and an empty log.
+- `exercises` that is not an array restores the defaults; an empty array stays empty.
+- Entries without a string `id` and `name` drop out; `reps` rounds and floors at 0; `target`
+  rounds and clamps to 0–7, defaulting to 3.
+- Log weeks whose key is not `YYYY-MM-DD`, and entries that are not arrays, drop out; the rest
+  normalise to exactly seven booleans.
+
+`parseSettings` accepts any `#rrggbb` accent (not only the four swatches) and clamps the daily
+pick to 1–8, falling back to the defaults otherwise. The prototype trusted its stored data and
+crashed outright on a payload without `log`.
 
 ## 4. Decisions beyond the design
 
@@ -59,10 +73,15 @@ normalise to exactly seven booleans. The prototype crashed outright on a payload
   keyboard and with a screen reader. The grid carries ARIA `table`/`row`/`cell` roles.
 - **Settings popover.** The handoff calls accent and daily pick user settings but shows no UI
   for them; the popover adds one. The default accent is green (`#30d158`), which the handoff
-  records as the user's pick.
-- **Steppers disable at their bounds** (goal 0/7, daily pick 1/8) instead of silently clamping.
-- **Today refreshes.** On `visibilitychange` the store re-reads the clock, so a tab left open
-  overnight moves the highlighted column.
+  records as the user's pick. It is a disclosure: an outside click or Escape closes it, and
+  Escape returns focus to the trigger. Swatches and the per-set toggle are `aria-pressed` buttons.
+- **Steppers mark their bounds** (goal 0/7, daily pick 1/8) with `aria-disabled` and ignore the
+  click there. `disabled` would drop keyboard focus mid-press. The store still clamps as a backstop.
+- **Today refreshes.** A one-minute tick and `visibilitychange` both call `refreshNow`, which
+  updates `now` only when the date has changed. A tab left open past midnight moves its
+  highlighted column within a minute.
+- **Tabs stay in sync.** `App.vue` listens for `storage` events and calls `syncFromStorage`, so
+  a stale tab adopts another tab's edits instead of overwriting them with its old state.
 - **Form fields are `content-box`.** That matches the prototype as rendered (34px fields, 92px
   reps box) rather than the README's nominal 32px/70px, which describe the content box.
 - **Print hides the dark fills.** Off cells and the today column print white; only done cells
