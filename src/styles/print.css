@@ -35,7 +35,9 @@
     color: #fff !important;
   }
 
+  /* The add forms are hidden, so give each grid its own bottom margin. */
   .grid-scroll {
     overflow: visible !important;
+    padding-bottom: 20px !important;
   }
 }

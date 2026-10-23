@@ -1,22 +1,35 @@
 <script setup lang="ts">
-import { usePlannerStore } from '@/stores/planner'
-import ExerciseRow from '@/components/ExerciseRow.vue'
+import type { Day } from '@/stores/planner'
+import type { CountTone, Tracked } from '@/lib/tracker'
+import TrackerRow from '@/components/TrackerRow.vue'
 
-const store = usePlannerStore()
-
-function countClass(n: number): string {
-  if (n === store.dailyPick) return 'met'
-  return n > store.dailyPick ? 'over' : 'under'
-}
+defineProps<{
+  /** First-column header: "Exercise" or "Food". */
+  label: string
+  tableLabel: string
+  items: Tracked[]
+  days: Day[]
+  flagsFor: (id: string) => boolean[]
+  totalFor: (id: string) => number
+  detailFor?: (item: Tracked) => string
+  footerLabel: string
+  counts: { text: string; tone: CountTone }[]
+  grandTotal: number
+}>()
+defineEmits<{
+  toggle: [id: string, day: number]
+  changeTarget: [id: string, delta: number]
+  remove: [id: string]
+}>()
 </script>
 
 <template>
   <div class="grid-scroll">
-    <div class="grid" role="table" aria-label="Exercises this week" data-surface>
+    <div class="grid" role="table" :aria-label="tableLabel" data-surface>
       <div role="row" class="contents">
-        <div role="columnheader" class="head label-cell" data-surface>Exercise</div>
+        <div role="columnheader" class="head label-cell" data-surface>{{ label }}</div>
         <div
-          v-for="d in store.days"
+          v-for="d in days"
           :key="d.key"
           role="columnheader"
           class="head day-head"
@@ -29,24 +42,33 @@ function countClass(n: number): string {
         <div role="columnheader" class="head label-cell week-head" data-surface>Week</div>
       </div>
 
-      <ExerciseRow v-for="e in store.exercises" :key="e.id" :exercise="e" />
+      <TrackerRow
+        v-for="it in items"
+        :key="it.id"
+        :item="it"
+        :detail="detailFor?.(it)"
+        :days="days"
+        :flags="flagsFor(it.id)"
+        :total="totalFor(it.id)"
+        @toggle="$emit('toggle', it.id, $event)"
+        @change-target="$emit('changeTarget', it.id, $event)"
+        @remove="$emit('remove', it.id)"
+      />
 
       <div role="row" class="contents">
-        <div role="rowheader" class="foot label-cell" data-surface>
-          Picked / {{ store.dailyPick }}
-        </div>
+        <div role="rowheader" class="foot label-cell" data-surface>{{ footerLabel }}</div>
         <div
-          v-for="(n, i) in store.dayCounts"
+          v-for="(c, i) in counts"
           :key="i"
           role="cell"
           class="foot mono count"
-          :class="countClass(n)"
+          :class="c.tone"
           data-surface
           data-testid="day-count"
         >
-          {{ n }}/{{ store.dailyPick }}
+          {{ c.text }}
         </div>
-        <div role="cell" class="foot mono count grand" data-surface>{{ store.grandTotal }}</div>
+        <div role="cell" class="foot mono count grand" data-surface>{{ grandTotal }}</div>
       </div>
     </div>
   </div>
@@ -144,6 +166,10 @@ function countClass(n: number): string {
 
 .count.under {
   color: var(--text-3);
+}
+
+.count.plain {
+  color: var(--text-2);
 }
 
 .count.grand {

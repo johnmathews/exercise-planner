@@ -17,14 +17,11 @@ import {
   type Exercise,
   type Log,
 } from '@/lib/storage'
+import * as tracker from '@/lib/tracker'
 
 export type Day = { name: string; date: string; key: string; isToday: boolean }
 
 export type NewExercise = { name: string; reps: number; perSide: boolean }
-
-function newId(): string {
-  return 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
-}
 
 export function repsLabel(e: Exercise): string {
   if (!e.reps) return '—'
@@ -59,23 +56,18 @@ export const usePlannerStore = defineStore('planner', () => {
   })
 
   function isDone(id: string, day: number): boolean {
-    return week.value[id]?.[day] === true
+    return tracker.isDone(week.value, id, day)
   }
 
   function totalFor(id: string): number {
-    return (week.value[id] ?? []).filter(Boolean).length
+    return tracker.totalFor(week.value, id)
   }
 
-  const dayCounts = computed(() =>
-    DAY_NAMES.map((_, i) => exercises.value.filter((e) => isDone(e.id, i)).length),
-  )
-
-  const grandTotal = computed(() => exercises.value.reduce((sum, e) => sum + totalFor(e.id), 0))
+  const dayCounts = computed(() => tracker.dayCounts(exercises.value, week.value))
+  const grandTotal = computed(() => tracker.grandTotal(exercises.value, week.value))
 
   function toggle(id: string, day: number): void {
-    const w = (log.value[weekKey.value] ??= {})
-    const flags = (w[id] ??= Array<boolean>(7).fill(false))
-    flags[day] = !flags[day]
+    tracker.toggleDay(log.value, weekKey.value, id, day)
   }
 
   function changeTarget(id: string, delta: number): void {
@@ -89,7 +81,7 @@ export const usePlannerStore = defineStore('planner', () => {
     if (!name) return false
     const reps = Number.isFinite(input.reps) && input.reps > 0 ? Math.floor(input.reps) : 0
     exercises.value.push({
-      id: newId(),
+      id: tracker.newId(),
       name,
       reps,
       perSide: input.perSide,

@@ -3,10 +3,13 @@ import { onBeforeUnmount, onMounted, watchEffect } from 'vue'
 import { usePlannerStore } from '@/stores/planner'
 import TitleBar from '@/components/TitleBar.vue'
 import WeekHeader from '@/components/WeekHeader.vue'
-import PlannerGrid from '@/components/PlannerGrid.vue'
+import ExerciseGrid from '@/components/ExerciseGrid.vue'
 import AddExerciseForm from '@/components/AddExerciseForm.vue'
+import DietSection from '@/components/DietSection.vue'
+import { useDietStore } from '@/stores/diet'
 
 const store = usePlannerStore()
+const diet = useDietStore()
 
 // The accent is a user setting, so it lives in a CSS variable rather than in the stylesheets.
 watchEffect(() => document.documentElement.style.setProperty('--accent', store.accent))
@@ -15,7 +18,9 @@ function onVisible(): void {
   if (document.visibilityState === 'visible') store.refreshNow()
 }
 function onStorage(ev: StorageEvent): void {
-  if (ev.storageArea === localStorage) store.syncFromStorage(ev.key)
+  if (ev.storageArea !== localStorage) return
+  store.syncFromStorage(ev.key)
+  diet.syncFromStorage(ev.key)
 }
 
 // The minute tick catches midnight in a tab that stays visible (e.g. a wall display);
@@ -38,8 +43,9 @@ onBeforeUnmount(() => {
     <main class="window" data-window>
       <TitleBar />
       <WeekHeader />
-      <PlannerGrid />
+      <ExerciseGrid />
       <AddExerciseForm />
+      <DietSection />
     </main>
   </div>
 </template>

@@ -1,18 +1,25 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { repsLabel, usePlannerStore } from '@/stores/planner'
-import { MAX_TARGET, MIN_TARGET, type Exercise } from '@/lib/storage'
+import type { Day } from '@/stores/planner'
+import { MAX_TARGET, MIN_TARGET } from '@/lib/storage'
+import { goalMet, type Tracked } from '@/lib/tracker'
 import DayCell from '@/components/DayCell.vue'
 import NumberStepper from '@/components/NumberStepper.vue'
 
-const props = defineProps<{ exercise: Exercise }>()
+const props = defineProps<{
+  item: Tracked
+  /** Small chip under the name, e.g. "10 reps / set". Omitted for foods. */
+  detail?: string
+  days: Day[]
+  flags: boolean[]
+  total: number
+}>()
+const emit = defineEmits<{ toggle: [day: number]; changeTarget: [delta: number]; remove: [] }>()
 
-const store = usePlannerStore()
-const total = computed(() => store.totalFor(props.exercise.id))
-const goalMet = computed(() => props.exercise.target > 0 && total.value >= props.exercise.target)
+const met = computed(() => goalMet(props.total, props.item.target))
 
 function remove(): void {
-  if (window.confirm(`Remove ${props.exercise.name}?`)) store.removeExercise(props.exercise.id)
+  if (window.confirm(`Remove ${props.item.name}?`)) emit('remove')
 }
 </script>
 
@@ -21,16 +28,16 @@ function remove(): void {
   <div role="row" class="row">
     <div role="rowheader" class="name-cell">
       <div class="name-wrap">
-        <div class="name">{{ exercise.name }}</div>
-        <div class="chip-row">
-          <span class="mono chip">{{ repsLabel(exercise) }}</span>
+        <div class="name">{{ item.name }}</div>
+        <div v-if="detail" class="chip-row">
+          <span class="mono chip">{{ detail }}</span>
         </div>
       </div>
       <button
         type="button"
         class="remove"
         title="Remove"
-        :aria-label="`Remove ${exercise.name}`"
+        :aria-label="`Remove ${item.name}`"
         data-noprint
         @click="remove"
       >
@@ -38,27 +45,27 @@ function remove(): void {
       </button>
     </div>
     <DayCell
-      v-for="(d, i) in store.days"
+      v-for="(d, i) in days"
       :key="d.key"
-      :on="store.isDone(exercise.id, i)"
+      :on="flags[i] === true"
       :today="d.isToday"
-      :label="`${exercise.name}, ${d.name} ${d.date}`"
-      @toggle="store.toggle(exercise.id, i)"
+      :label="`${item.name}, ${d.name} ${d.date}`"
+      @toggle="emit('toggle', i)"
     />
     <div role="cell" class="week-cell">
-      <div class="mono total" :class="{ met: goalMet }" data-testid="row-total">
-        {{ total }}<span class="target"> / {{ exercise.target }}</span>
+      <div class="mono total" :class="{ met }" data-testid="row-total">
+        {{ total }}<span class="target"> / {{ item.target }}</span>
       </div>
       <NumberStepper
-        :value="exercise.target"
+        :value="item.target"
         :min="MIN_TARGET"
         :max="MAX_TARGET"
         lower-title="Lower goal"
         raise-title="Raise goal"
-        :lower-label="`Lower ${exercise.name} goal`"
-        :raise-label="`Raise ${exercise.name} goal`"
+        :lower-label="`Lower ${item.name} goal`"
+        :raise-label="`Raise ${item.name} goal`"
         data-noprint
-        @change="store.changeTarget(exercise.id, $event)"
+        @change="emit('changeTarget', $event)"
       />
     </div>
   </div>
