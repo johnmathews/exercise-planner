@@ -28,10 +28,10 @@ function submit(): void {
 </script>
 
 <template>
-  <form class="add" data-noprint @submit.prevent="submit">
+  <form class="form-row" data-noprint @submit.prevent="submit">
     <input
       v-model="name"
-      class="field name"
+      class="field field-grow"
       placeholder="New exercise"
       aria-label="New exercise name"
     />
@@ -63,40 +63,12 @@ function submit(): void {
         each side, per set
       </button>
     </div>
-    <button type="submit" class="submit">Add Exercise</button>
+    <button type="submit" class="btn-primary">Add Exercise</button>
   </form>
 </template>
 
 <style scoped>
-.add {
-  padding: 20px 28px 28px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-/* content-box, as in the prototype: the rendered fields are 34px tall and the reps box 92px wide. */
-.field {
-  box-sizing: content-box;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--toolbar);
-  font-size: 13px;
-  color: var(--text);
-}
-
-.field:focus {
-  border-color: var(--focus);
-  box-shadow: var(--focus-ring);
-}
-
-.name {
-  flex: 1 1 220px;
-}
-
+/* .field is content-box, so 70px renders as the prototype's 92px reps box. */
 .reps {
   width: 70px;
 }
@@ -124,20 +96,5 @@ function submit(): void {
 .seg.selected {
   background: var(--border-strong);
   color: var(--text);
-}
-
-.submit {
-  height: 32px;
-  padding: 0 16px;
-  border: none;
-  background: #0a84ff;
-  color: #fff;
-  border-radius: 7px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.submit:hover {
-  background: #409cff;
 }
 </style>

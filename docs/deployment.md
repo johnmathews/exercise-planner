@@ -7,15 +7,24 @@
 ## 1. Image
 
 `Dockerfile` has two stages. The `node:22-alpine` stage installs npm 11, runs `npm ci`, and runs
-`npm run build`, which fails on a type error or a bundling error. The runtime stage is
-`nginxinc/nginx-unprivileged:1.29-alpine`, which runs as the non-root `nginx` user (uid 101) on
-port **8080**. `.dockerignore` keeps `node_modules`, `dist`, `.git`, `.github`, `docs`, `journal`
-and the design handoff out of the build context.
+`npm run build`, which fails on a type error or a bundling error. It is pinned to `$BUILDPLATFORM`:
+static files are identical for every target, so it runs once, natively. The runtime stage is
+`nginxinc/nginx-unprivileged:1.29-alpine`, which runs as the non-root `nginx` user (uid 101) on port
+**8080**. `.dockerignore` keeps dependencies, build output, git and CI metadata, docs, the journal,
+the design handoff and local tooling directories out of the build context.
+
+The image is multi-architecture (`linux/amd64`, `linux/arm64`). Only the runtime stage is assembled
+per target, and it holds nothing but `COPY` steps, so no QEMU emulation is needed.
 
 ```bash
-docker build -t exercise-planner .
+docker build -t exercise-planner .        # host architecture, loaded locally
 docker run -p 8080:8080 exercise-planner
 ```
+
+To check both platforms build, run
+`docker buildx build --platform linux/amd64,linux/arm64 -t exercise-planner .`. A multi-platform
+result stays in the build cache unless the builder supports loading it (Docker Desktop with the
+containerd image store) or `--push` sends it to a registry.
 
 ## 2. nginx
 
@@ -27,12 +36,12 @@ docker run -p 8080:8080 exercise-planner
   Unknown paths fall back to `index.html`.
 - `/healthz` returns `200 ok`; the image's `HEALTHCHECK` polls it with BusyBox `wget`.
 - Every response carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and a
-  Content-Security-Policy of `default-src 'self'`. `style-src` allows `'unsafe-inline'` because
-  Vue binds the accent and swatch colours as inline styles.
-- gzip compresses CSS, JavaScript and SVG.
+  Content-Security-Policy of `default-src 'self'`. `style-src` allows `'unsafe-inline'` because Vue
+  binds the accent and swatch colours as inline styles.
+- gzip compresses HTML, CSS, JavaScript and SVG.
 
-All headers are set once at server level through a `map` on `$uri`. A `location` that declared
-its own `add_header` would silently drop the inherited ones.
+All headers are set once at server level; `Cache-Control` varies through a `map` on `$uri`. A
+`location` that declared its own `add_header` would silently drop the inherited ones.
 
 ## 3. CI and publishing
 
@@ -41,10 +50,11 @@ its own `add_header` would silently drop the inherited ones.
 | `.github/workflows/ci.yml`     | pull request, push to `main` | lint, format check, type-check, tests with coverage, build |
 | `.github/workflows/docker.yml` | pull request, push to `main` | `build` job on PRs; `publish` job on `main`                |
 
-The `build` job builds the image without pushing and holds only `contents: read`. The `publish`
+Both jobs build `linux/amd64` and `linux/arm64`, so a PR proves the multi-arch build before `main`
+publishes it. The `build` job builds without pushing and holds only `contents: read`. The `publish`
 job is the only one granted `packages: write`. It logs in to `ghcr.io` with `GITHUB_TOKEN` and
-pushes `ghcr.io/johnmathews/exercise-planner` tagged `latest` and `sha-<short sha>`. Every
-checkout sets `persist-credentials: false`.
+pushes `ghcr.io/johnmathews/exercise-planner` tagged `latest` and `sha-<short sha>`. Every checkout
+sets `persist-credentials: false`.
 
 ## 4. Data and hosting
 

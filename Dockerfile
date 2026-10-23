@@ -1,4 +1,6 @@
-FROM node:22-alpine AS build
+# The build stage runs on the runner's native platform: its output (static files) is the same
+# for every target, so only the COPY-only runtime stage is built per architecture, without QEMU.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /app
 # npm 11: npm 10.9's resolver crashes on this dependency tree (see docs/development.md).
 RUN npm install -g npm@11

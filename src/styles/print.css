@@ -35,7 +35,11 @@
     color: #fff !important;
   }
 
+  /* The add forms are hidden, so give each grid its own bottom margin. */
   .grid-scroll {
     overflow: visible !important;
+    padding-bottom: 20px !important;
+    /* With both grids the sheet can run past one page; move a whole grid rather than split it. */
+    break-inside: avoid;
   }
 }

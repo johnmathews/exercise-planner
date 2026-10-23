@@ -15,6 +15,11 @@ function mountApp(): VueWrapper {
   return wrapper
 }
 
+/** The exercise grid only; the diet grid below reuses the same markup. */
+function ex() {
+  return wrapper.get('[data-testid="exercise-grid"]')
+}
+
 function rowCells(name: string) {
   return wrapper.findAll(`button[aria-label^="${name},"]`)
 }
@@ -35,13 +40,11 @@ describe('App', () => {
   it('renders the week label, the default rows and the reps chips', () => {
     mountApp()
     expect(wrapper.find('h1').text()).toBe('Oct 19 – Oct 25, 2026')
-    expect(wrapper.findAll('[role="rowheader"] .name').map((n) => n.text())).toEqual([
-      'Push-ups',
-      'Pull-ups',
-      'Squats',
-      'Back extensions',
-      'Kettlebell halos',
-    ])
+    expect(
+      ex()
+        .findAll('[role="rowheader"] .name')
+        .map((n) => n.text()),
+    ).toEqual(['Push-ups', 'Pull-ups', 'Squats', 'Back extensions', 'Kettlebell halos'])
     const chips = wrapper.findAll('.chip').map((c) => c.text())
     expect(chips[0]).toBe('10 reps / set')
     expect(chips[4]).toBe('8 each side / set')
@@ -49,7 +52,7 @@ describe('App', () => {
 
   it('marks today’s column in the header and the cells', () => {
     mountApp()
-    const heads = wrapper.findAll('.day-head')
+    const heads = ex().findAll('.day-head')
     expect(heads.map((h) => h.classes('today'))).toEqual([
       false,
       false,
@@ -70,13 +73,13 @@ describe('App', () => {
     expect(cell.attributes('aria-pressed')).toBe('true')
     expect(cell.find('[data-on="true"]').text()).toBe('✓')
     expect(wrapper.get('[data-testid="grand-total"]').text()).toBe('1')
-    expect(wrapper.findAll('[data-testid="day-count"]')[1]!.text()).toBe('1/3')
-    expect(wrapper.findAll('[data-testid="row-total"]')[0]!.text()).toBe('1 / 4')
+    expect(ex().findAll('[data-testid="day-count"]')[1]!.text()).toBe('1/3')
+    expect(ex().findAll('[data-testid="row-total"]')[0]!.text()).toBe('1 / 4')
   })
 
   it('colours the footer count by whether the daily pick is met, exceeded or not', async () => {
     mountApp()
-    const counts = () => wrapper.findAll('[data-testid="day-count"]')
+    const counts = () => ex().findAll('[data-testid="day-count"]')
     for (const name of ['Push-ups', 'Pull-ups', 'Squats']) await rowCells(name)[0]!.trigger('click')
     expect(counts()[0]!.classes()).toContain('met')
     await rowCells('Kettlebell halos')[0]!.trigger('click')
@@ -86,7 +89,7 @@ describe('App', () => {
 
   it('highlights the row total once the goal is reached, and steps the goal', async () => {
     mountApp()
-    const total = () => wrapper.findAll('[data-testid="row-total"]')[3]!
+    const total = () => ex().findAll('[data-testid="row-total"]')[3]!
     await rowCells('Back extensions')[0]!.trigger('click')
     expect(total().classes()).not.toContain('met')
     const lower = wrapper.get('button[aria-label="Lower Back extensions goal"]')
@@ -168,9 +171,11 @@ describe('App', () => {
       new StorageEvent('storage', { key: 'exercise-planner-v1', storageArea: localStorage }),
     )
     await wrapper.vm.$nextTick()
-    expect(wrapper.findAll('[role="rowheader"] .name').map((n) => n.text())).toEqual([
-      'From other tab',
-    ])
+    expect(
+      ex()
+        .findAll('[role="rowheader"] .name')
+        .map((n) => n.text()),
+    ).toEqual(['From other tab'])
     expect(wrapper.get('[data-testid="grand-total"]').text()).toBe('1')
   })
 })
@@ -193,7 +198,7 @@ describe('AddExerciseForm', () => {
       .trigger('click')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.findAll('.chip').at(-1)!.text()).toBe('12 each side / set')
-    expect(wrapper.findAll('[data-testid="row-total"]').at(-1)!.text()).toBe('0 / 3')
+    expect(ex().findAll('[data-testid="row-total"]').at(-1)!.text()).toBe('0 / 3')
     expect(
       (wrapper.get('input[aria-label="New exercise name"]').element as HTMLInputElement).value,
     ).toBe('')
@@ -206,7 +211,7 @@ describe('AddExerciseForm', () => {
     mountApp()
     await wrapper.get('input[aria-label="New exercise name"]').setValue('   ')
     await wrapper.get('form').trigger('submit')
-    expect(wrapper.findAll('[role="rowheader"] .name')).toHaveLength(5)
+    expect(ex().findAll('[role="rowheader"] .name')).toHaveLength(5)
   })
 
   it('shows an em dash when no reps are given', async () => {
@@ -241,7 +246,7 @@ describe('SettingsPopover', () => {
 
     await wrapper.get('button[aria-label="More exercises per day"]').trigger('click')
     expect(wrapper.find('.sub').text()).toBe('Pick 4 exercises a day. Click a cell when it’s done.')
-    expect(wrapper.findAll('[data-testid="day-count"]')[0]!.text()).toBe('0/4')
+    expect(ex().findAll('[data-testid="day-count"]')[0]!.text()).toBe('0/4')
 
     ;(wrapper.get('button[aria-label="Purple"]').element as HTMLElement).focus()
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))

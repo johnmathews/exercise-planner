@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_SETTINGS,
   defaultExercises,
+  defaultFoods,
+  parseDietData,
   parsePlannerData,
   parseSettings,
   readKey,
@@ -82,6 +84,39 @@ describe('parsePlannerData', () => {
     expect(parsed.log).toEqual({
       '2026-10-19': { a: [true, false, false, false, false, false, false] },
     })
+  })
+})
+
+describe('parseDietData', () => {
+  it('returns the default foods and an empty log when nothing is stored', () => {
+    expect(parseDietData(null)).toEqual({ foods: defaultFoods(), log: {} })
+    expect(defaultFoods().map((f) => f.name)).toEqual(['Vegetables', 'Fruit', 'Fish', 'Nuts'])
+  })
+
+  it('round-trips a valid payload byte for byte', () => {
+    const data = {
+      foods: [{ id: 'veg', name: 'Vegetables', target: 7 }],
+      log: { '2026-10-19': { veg: [true, false, false, false, false, false, true] } },
+    }
+    expect(JSON.stringify(parseDietData(JSON.stringify(data)))).toBe(JSON.stringify(data))
+  })
+
+  it('falls back per field and drops or clamps bad foods', () => {
+    const parsed = parseDietData(
+      JSON.stringify({
+        foods: [{ id: 'a', name: 'A', target: 9 }, { id: 'b', name: 'B' }, { name: 'no id' }],
+        log: 'nope',
+      }),
+    )
+    expect(parsed).toEqual({
+      foods: [
+        { id: 'a', name: 'A', target: 7 },
+        { id: 'b', name: 'B', target: 3 },
+      ],
+      log: {},
+    })
+    expect(parseDietData('{bad').foods).toEqual(defaultFoods())
+    expect(parseDietData(JSON.stringify({ log: {} })).foods).toEqual(defaultFoods())
   })
 })
 
