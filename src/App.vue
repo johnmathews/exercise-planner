@@ -14,8 +14,23 @@ watchEffect(() => document.documentElement.style.setProperty('--accent', store.a
 function onVisible(): void {
   if (document.visibilityState === 'visible') store.refreshNow()
 }
-onMounted(() => document.addEventListener('visibilitychange', onVisible))
-onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible))
+function onStorage(ev: StorageEvent): void {
+  if (ev.storageArea === localStorage) store.syncFromStorage(ev.key)
+}
+
+// The minute tick catches midnight in a tab that stays visible (e.g. a wall display);
+// visibilitychange catches it immediately when a backgrounded tab returns.
+let tick: ReturnType<typeof setInterval> | undefined
+onMounted(() => {
+  document.addEventListener('visibilitychange', onVisible)
+  window.addEventListener('storage', onStorage)
+  tick = setInterval(store.refreshNow, 60_000)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisible)
+  window.removeEventListener('storage', onStorage)
+  clearInterval(tick)
+})
 </script>
 
 <template>

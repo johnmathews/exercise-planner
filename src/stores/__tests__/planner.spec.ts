@@ -137,6 +137,35 @@ describe('planner store', () => {
     expect(s.days.findIndex((d) => d.isToday)).toBe(5)
   })
 
+  it('leaves now untouched when refreshNow runs on the same date', () => {
+    const s = usePlannerStore()
+    const before = s.now
+    vi.setSystemTime(new Date(2026, 9, 23, 23, 59))
+    s.refreshNow()
+    expect(s.now).toBe(before)
+  })
+
+  it('syncFromStorage adopts another tab’s data and settings', () => {
+    const s = usePlannerStore()
+    localStorage.setItem(DATA_KEY, JSON.stringify({ exercises: [], log: {} }))
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ accent: '#ff9f0a', dailyPick: 5 }))
+    s.syncFromStorage(SETTINGS_KEY)
+    expect(s.accent).toBe('#ff9f0a')
+    expect(s.exercises).toHaveLength(5)
+    s.syncFromStorage(DATA_KEY)
+    expect(s.exercises).toEqual([])
+  })
+
+  it('syncFromStorage(null) resets to defaults after storage is cleared elsewhere', () => {
+    const s = usePlannerStore()
+    s.toggle('pu', 0)
+    s.setAccent('#bf5af2')
+    localStorage.clear()
+    s.syncFromStorage(null)
+    expect(s.grandTotal).toBe(0)
+    expect(s.accent).toBe('#30d158')
+  })
+
   it('persists settings separately and clamps daily pick to 1–8', async () => {
     const s = usePlannerStore()
     expect(s.accent).toBe('#30d158')

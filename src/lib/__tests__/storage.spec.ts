@@ -27,9 +27,8 @@ describe('parsePlannerData', () => {
       log: { '2026-10-19': { pu: [true, false, true, false, false, false, false] } },
     }
     const parsed = parsePlannerData(JSON.stringify(prototype))
-    expect(parsed.log).toEqual(prototype.log)
-    expect(parsed.exercises.map((e) => e.id)).toEqual(['pu', 'kh', 'x1729700000000'])
-    expect(parsed.exercises[1]).toEqual(prototype.exercises[1])
+    expect(parsed).toEqual(prototype)
+    expect(JSON.stringify(parsed)).toBe(JSON.stringify(prototype))
   })
 
   it('keeps exercises when log is missing (the prototype crashed here)', () => {
@@ -115,6 +114,15 @@ describe('readKey / writeKey', () => {
   it('writes JSON and reads it back', () => {
     writeKey('k', { a: 1 })
     expect(readKey('k')).toBe('{"a":1}')
+  })
+
+  it('skips the write when the stored value is already identical', () => {
+    writeKey('k', { a: 1 })
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
+    writeKey('k', { a: 1 })
+    expect(setItem).not.toHaveBeenCalled()
+    writeKey('k', { a: 2 })
+    expect(setItem).toHaveBeenCalledOnce()
   })
 
   it('swallows storage errors so the app keeps running', () => {

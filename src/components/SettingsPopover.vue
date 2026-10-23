@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, useId } from 'vue'
 import { usePlannerStore } from '@/stores/planner'
 import { ACCENTS, MAX_DAILY_PICK, MIN_DAILY_PICK } from '@/lib/storage'
+import NumberStepper from '@/components/NumberStepper.vue'
 
 const ACCENT_NAMES: Record<string, string> = {
   '#0a84ff': 'Blue',
@@ -13,13 +14,17 @@ const ACCENT_NAMES: Record<string, string> = {
 const store = usePlannerStore()
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
+const trigger = ref<HTMLButtonElement | null>(null)
 const panelId = useId()
 
 function onPointerDown(ev: PointerEvent): void {
   if (open.value && root.value && !root.value.contains(ev.target as Node)) open.value = false
 }
 function onKeydown(ev: KeyboardEvent): void {
-  if (ev.key === 'Escape') open.value = false
+  if (ev.key !== 'Escape' || !open.value) return
+  open.value = false
+  // The panel unmounts, so hand focus back rather than letting it fall to <body>.
+  trigger.value?.focus()
 }
 
 onMounted(() => {
@@ -35,6 +40,7 @@ onBeforeUnmount(() => {
 <template>
   <div ref="root" class="settings" data-noprint>
     <button
+      ref="trigger"
       type="button"
       class="trigger"
       :aria-expanded="open"
@@ -43,18 +49,17 @@ onBeforeUnmount(() => {
     >
       <span class="dot" aria-hidden="true" />Settings
     </button>
-    <div v-if="open" :id="panelId" class="panel" role="dialog" aria-label="Settings">
+    <div v-if="open" :id="panelId" class="panel" role="group" aria-label="Settings">
       <div class="label">Accent</div>
-      <div class="swatches" role="radiogroup" aria-label="Accent colour">
+      <div class="swatches" role="group" aria-label="Accent colour">
         <button
           v-for="c in ACCENTS"
           :key="c"
           type="button"
-          role="radio"
           class="swatch"
           :class="{ selected: store.accent === c }"
           :style="{ background: c }"
-          :aria-checked="store.accent === c"
+          :aria-pressed="store.accent === c"
           :aria-label="ACCENT_NAMES[c]"
           :title="ACCENT_NAMES[c]"
           @click="store.setAccent(c)"
@@ -63,27 +68,16 @@ onBeforeUnmount(() => {
       <div class="label">Exercises per day</div>
       <div class="pick-row">
         <span class="mono pick-value" aria-live="polite">{{ store.dailyPick }}</span>
-        <div class="stepper">
-          <button
-            type="button"
-            title="Fewer per day"
-            aria-label="Fewer exercises per day"
-            :disabled="store.dailyPick <= MIN_DAILY_PICK"
-            @click="store.changeDailyPick(-1)"
-          >
-            −
-          </button>
-          <div class="divider" />
-          <button
-            type="button"
-            title="More per day"
-            aria-label="More exercises per day"
-            :disabled="store.dailyPick >= MAX_DAILY_PICK"
-            @click="store.changeDailyPick(1)"
-          >
-            +
-          </button>
-        </div>
+        <NumberStepper
+          :value="store.dailyPick"
+          :min="MIN_DAILY_PICK"
+          :max="MAX_DAILY_PICK"
+          lower-title="Fewer per day"
+          raise-title="More per day"
+          lower-label="Fewer exercises per day"
+          raise-label="More exercises per day"
+          @change="store.changeDailyPick"
+        />
       </div>
     </div>
   </div>
@@ -173,37 +167,5 @@ onBeforeUnmount(() => {
 .pick-value {
   font-size: 20px;
   font-weight: 600;
-}
-
-.stepper {
-  display: flex;
-  background: var(--window);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.stepper button {
-  width: 24px;
-  height: 20px;
-  border: none;
-  background: transparent;
-  font-size: 12px;
-  color: var(--text-2);
-}
-
-.stepper button:hover:not(:disabled) {
-  background: var(--border);
-  color: var(--text);
-}
-
-.stepper button:disabled {
-  color: var(--text-3);
-  cursor: default;
-}
-
-.divider {
-  width: 1px;
-  background: var(--border);
 }
 </style>

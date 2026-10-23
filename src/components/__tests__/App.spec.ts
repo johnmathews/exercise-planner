@@ -97,7 +97,9 @@ describe('App', () => {
     await lower.trigger('click')
     expect(total().text()).toBe('1 / 0')
     expect(total().classes()).not.toContain('met')
-    expect(lower.attributes('disabled')).toBeDefined()
+    expect(lower.attributes('aria-disabled')).toBe('true')
+    await lower.trigger('click')
+    expect(total().text()).toBe('1 / 0')
     await wrapper.get('button[aria-label="Raise Back extensions goal"]').trigger('click')
     expect(total().text()).toBe('1 / 1')
   })
@@ -144,6 +146,33 @@ describe('App', () => {
     document.dispatchEvent(new Event('visibilitychange'))
     expect(store.days.findIndex((d) => d.isToday)).toBe(5)
   })
+
+  it('moves today at midnight in a tab that stays visible', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(NOW)
+    mountApp()
+    const store = usePlannerStore()
+    vi.setSystemTime(new Date(2026, 9, 24, 0, 0, 30))
+    vi.advanceTimersByTime(60_000)
+    expect(store.days.findIndex((d) => d.isToday)).toBe(5)
+  })
+
+  it('adopts changes another tab writes to storage', async () => {
+    mountApp()
+    const other = {
+      exercises: [{ id: 'a', name: 'From other tab', reps: 5, target: 2 }],
+      log: { '2026-10-19': { a: [true, false, false, false, false, false, false] } },
+    }
+    localStorage.setItem('exercise-planner-v1', JSON.stringify(other))
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: 'exercise-planner-v1', storageArea: localStorage }),
+    )
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('[role="rowheader"] .name').map((n) => n.text())).toEqual([
+      'From other tab',
+    ])
+    expect(wrapper.get('[data-testid="grand-total"]').text()).toBe('1')
+  })
 })
 
 describe('AddExerciseForm', () => {
@@ -159,7 +188,7 @@ describe('AddExerciseForm', () => {
     await reps.setValue('1a2')
     expect((reps.element as HTMLInputElement).value).toBe('12')
     await wrapper
-      .findAll('button[role="radio"]')
+      .findAll('button[aria-pressed]')
       .find((b) => b.text() === 'each side, per set')!
       .trigger('click')
     await wrapper.get('form').trigger('submit')
@@ -169,8 +198,8 @@ describe('AddExerciseForm', () => {
       (wrapper.get('input[aria-label="New exercise name"]').element as HTMLInputElement).value,
     ).toBe('')
     expect((reps.element as HTMLInputElement).value).toBe('')
-    const perSet = wrapper.findAll('button[role="radio"]').find((b) => b.text() === 'per set')!
-    expect(perSet.attributes('aria-checked')).toBe('true')
+    const perSet = wrapper.findAll('button[aria-pressed]').find((b) => b.text() === 'per set')!
+    expect(perSet.attributes('aria-pressed')).toBe('true')
   })
 
   it('does nothing for an empty name', async () => {
@@ -194,39 +223,43 @@ describe('SettingsPopover', () => {
   })
   afterEach(() => wrapper?.unmount())
 
+  const PANEL = '[role="group"][aria-label="Settings"]'
+
   function trigger() {
     return wrapper.findAll('button').find((b) => b.text() === 'Settings')!
   }
 
   it('opens, changes accent and daily pick live, and closes on Escape', async () => {
     mountApp()
-    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.find(PANEL).exists()).toBe(false)
     await trigger().trigger('click')
     expect(trigger().attributes('aria-expanded')).toBe('true')
 
     await wrapper.get('button[aria-label="Purple"]').trigger('click')
-    expect(wrapper.get('button[aria-label="Purple"]').attributes('aria-checked')).toBe('true')
+    expect(wrapper.get('button[aria-label="Purple"]').attributes('aria-pressed')).toBe('true')
     expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#bf5af2')
 
     await wrapper.get('button[aria-label="More exercises per day"]').trigger('click')
     expect(wrapper.find('.sub').text()).toBe('Pick 4 exercises a day. Click a cell when it’s done.')
     expect(wrapper.findAll('[data-testid="day-count"]')[0]!.text()).toBe('0/4')
 
+    ;(wrapper.get('button[aria-label="Purple"]').element as HTMLElement).focus()
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.find(PANEL).exists()).toBe(false)
+    expect(document.activeElement).toBe(trigger().element)
   })
 
   it('closes on an outside pointerdown but not on one inside', async () => {
     mountApp()
     await trigger().trigger('click')
-    const panel = wrapper.get('[role="dialog"]').element
+    const panel = wrapper.get(PANEL).element
     panel.dispatchEvent(new Event('pointerdown', { bubbles: true }))
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
+    expect(wrapper.find(PANEL).exists()).toBe(true)
     document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    expect(wrapper.find(PANEL).exists()).toBe(false)
   })
 
   it('disables the daily-pick buttons at the 1–8 bounds', async () => {
@@ -235,7 +268,8 @@ describe('SettingsPopover', () => {
     const fewer = wrapper.get('button[aria-label="Fewer exercises per day"]')
     await fewer.trigger('click')
     await fewer.trigger('click')
-    expect(fewer.attributes('disabled')).toBeDefined()
+    expect(fewer.attributes('aria-disabled')).toBe('true')
+    await fewer.trigger('click')
     expect(wrapper.get('.pick-value').text()).toBe('1')
   })
 })

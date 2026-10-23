@@ -112,8 +112,27 @@ export const usePlannerStore = defineStore('planner', () => {
   function thisWeek(): void {
     weekOffset.value = 0
   }
+  /** Moves "today" only when the calendar date has changed, so periodic calls are free. */
   function refreshNow(): void {
-    now.value = new Date()
+    const next = new Date()
+    if (dateKey(next) !== dateKey(now.value)) now.value = next
+  }
+
+  /**
+   * Adopt a change another tab wrote (from a `storage` event). Without this a stale tab writes its
+   * whole in-memory state back and erases the other tab's edits. `key` is null when storage is cleared.
+   */
+  function syncFromStorage(key: string | null): void {
+    if (key === null || key === DATA_KEY) {
+      const fresh = parsePlannerData(readKey(DATA_KEY))
+      exercises.value = fresh.exercises
+      log.value = fresh.log
+    }
+    if (key === null || key === SETTINGS_KEY) {
+      const fresh = parseSettings(readKey(SETTINGS_KEY))
+      accent.value = fresh.accent
+      dailyPick.value = fresh.dailyPick
+    }
   }
 
   function setAccent(color: string): void {
@@ -157,6 +176,7 @@ export const usePlannerStore = defineStore('planner', () => {
     nextWeek,
     thisWeek,
     refreshNow,
+    syncFromStorage,
     setAccent,
     changeDailyPick,
   }

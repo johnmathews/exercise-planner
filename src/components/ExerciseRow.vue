@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { repsLabel, usePlannerStore } from '@/stores/planner'
-import type { Exercise } from '@/lib/storage'
+import { MAX_TARGET, MIN_TARGET, type Exercise } from '@/lib/storage'
 import DayCell from '@/components/DayCell.vue'
-import GoalStepper from '@/components/GoalStepper.vue'
+import NumberStepper from '@/components/NumberStepper.vue'
 
 const props = defineProps<{ exercise: Exercise }>()
 
@@ -49,9 +49,15 @@ function remove(): void {
       <div class="mono total" :class="{ met: goalMet }" data-testid="row-total">
         {{ total }}<span class="target"> / {{ exercise.target }}</span>
       </div>
-      <GoalStepper
+      <NumberStepper
         :value="exercise.target"
-        :name="exercise.name"
+        :min="MIN_TARGET"
+        :max="MAX_TARGET"
+        lower-title="Lower goal"
+        raise-title="Raise goal"
+        :lower-label="`Lower ${exercise.name} goal`"
+        :raise-label="`Raise ${exercise.name} goal`"
+        data-noprint
         @change="store.changeTarget(exercise.id, $event)"
       />
     </div>

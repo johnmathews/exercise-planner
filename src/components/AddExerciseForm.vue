@@ -43,23 +43,21 @@ function submit(): void {
       aria-label="Reps"
       @input="onRepsInput"
     />
-    <div class="segmented" role="radiogroup" aria-label="Reps count">
+    <div class="segmented" role="group" aria-label="Reps count">
       <button
         type="button"
-        role="radio"
         class="seg"
         :class="{ selected: !perSide }"
-        :aria-checked="!perSide"
+        :aria-pressed="!perSide"
         @click="perSide = false"
       >
         per set
       </button>
       <button
         type="button"
-        role="radio"
         class="seg"
         :class="{ selected: perSide }"
-        :aria-checked="perSide"
+        :aria-pressed="perSide"
         @click="perSide = true"
       >
         each side, per set

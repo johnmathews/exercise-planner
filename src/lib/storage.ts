@@ -51,14 +51,15 @@ function toInt(v: unknown, fallback: number): number {
 
 function normaliseExercise(v: unknown): Exercise | null {
   if (!isRecord(v) || typeof v.id !== 'string' || typeof v.name !== 'string') return null
-  const ex: Exercise = {
+  // Key order and an explicit `perSide: false` both follow the prototype, so its saved data
+  // re-serialises byte for byte and loading it never triggers a rewrite.
+  return {
     id: v.id,
     name: v.name,
     reps: Math.max(0, toInt(v.reps, 0)),
+    ...(typeof v.perSide === 'boolean' ? { perSide: v.perSide } : {}),
     target: clamp(toInt(v.target, NEW_EXERCISE_TARGET), MIN_TARGET, MAX_TARGET),
   }
-  if (v.perSide === true) ex.perSide = true
-  return ex
 }
 
 function normaliseLog(v: unknown): Log {
@@ -124,9 +125,11 @@ export function readKey(key: string): string | null {
   }
 }
 
+/** Skips unchanged values, so adopting another tab's write never echoes back to it. */
 export function writeKey(key: string, value: unknown): void {
   try {
-    localStorage.setItem(key, JSON.stringify(value))
+    const json = JSON.stringify(value)
+    if (localStorage.getItem(key) !== json) localStorage.setItem(key, json)
   } catch {
     // Storage unavailable or full: keep running with in-memory state.
   }
