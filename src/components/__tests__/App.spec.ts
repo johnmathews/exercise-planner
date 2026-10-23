@@ -15,6 +15,13 @@ function mountApp(): VueWrapper {
   return wrapper
 }
 
+/** Mount with config mode on, where the plan-editing controls are. */
+async function mountConfig(): Promise<VueWrapper> {
+  mountApp()
+  await wrapper.get('button[role="switch"]').trigger('click')
+  return wrapper
+}
+
 /** The exercise grid only; the diet grid below reuses the same markup. */
 function ex() {
   return wrapper.get('[data-testid="exercise-grid"]')
@@ -88,7 +95,7 @@ describe('App', () => {
   })
 
   it('highlights the row total once the goal is reached, and steps the goal', async () => {
-    mountApp()
+    await mountConfig()
     const total = () => ex().findAll('[data-testid="row-total"]')[3]!
     await rowCells('Back extensions')[0]!.trigger('click')
     expect(total().attributes('data-met')).toBe('false')
@@ -122,7 +129,7 @@ describe('App', () => {
   })
 
   it('removes an exercise only after confirmation', async () => {
-    mountApp()
+    await mountConfig()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     const remove = wrapper.get('button[aria-label="Remove Squats"]')
     await remove.trigger('click')
@@ -163,12 +170,12 @@ describe('App', () => {
   it('adopts changes another tab writes to storage', async () => {
     mountApp()
     const other = {
-      exercises: [{ id: 'a', name: 'From other tab', reps: 5, target: 2 }],
+      plans: { '2026-10-19': [{ id: 'a', name: 'From other tab', reps: 5, target: 2 }] },
       log: { '2026-10-19': { a: [true, false, false, false, false, false, false] } },
     }
-    localStorage.setItem('exercise-planner-v1', JSON.stringify(other))
+    localStorage.setItem('exercise-planner-v2', JSON.stringify(other))
     window.dispatchEvent(
-      new StorageEvent('storage', { key: 'exercise-planner-v1', storageArea: localStorage }),
+      new StorageEvent('storage', { key: 'exercise-planner-v2', storageArea: localStorage }),
     )
     await wrapper.vm.$nextTick()
     expect(
@@ -187,7 +194,7 @@ describe('AddExerciseForm', () => {
   afterEach(() => wrapper?.unmount())
 
   it('adds an exercise on submit, keeping only digits in reps, then resets', async () => {
-    mountApp()
+    await mountConfig()
     await wrapper.get('input[aria-label="New exercise name"]').setValue('Lunges')
     const reps = wrapper.get('input[aria-label="Reps"]')
     await reps.setValue('1a2')
@@ -208,14 +215,14 @@ describe('AddExerciseForm', () => {
   })
 
   it('does nothing for an empty name', async () => {
-    mountApp()
+    await mountConfig()
     await wrapper.get('input[aria-label="New exercise name"]').setValue('   ')
     await wrapper.get('form').trigger('submit')
     expect(ex().findAll('[data-testid="item-name"]')).toHaveLength(5)
   })
 
   it('shows an em dash when no reps are given', async () => {
-    mountApp()
+    await mountConfig()
     await wrapper.get('input[aria-label="New exercise name"]').setValue('Plank')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.findAll('[data-testid="item-detail"]').at(-1)!.text()).toBe('—')
@@ -231,7 +238,7 @@ describe('SettingsPopover', () => {
   const PANEL = '[role="group"][aria-label="Settings"]'
 
   function trigger() {
-    return wrapper.findAll('button').find((b) => b.text() === 'Settings')!
+    return wrapper.findAll('button').find((b) => b.text().endsWith('Settings'))!
   }
 
   it('opens, changes accent and daily pick live, and closes on Escape', async () => {
@@ -324,7 +331,7 @@ describe('theme', () => {
     expect(isDarkClass()).toBe(false)
     await wrapper
       .findAll('button')
-      .find((b) => b.text() === 'Settings')!
+      .find((b) => b.text().endsWith('Settings'))!
       .trigger('click')
     const themeButton = (name: string) =>
       wrapper
@@ -373,7 +380,7 @@ describe('exercise weight', () => {
   }
 
   it('adds an exercise with a weight, accepting a comma decimal', async () => {
-    mountApp()
+    await mountConfig()
     await wrapper.get('input[aria-label="New exercise name"]').setValue('Swings')
     await wrapper.get('input[aria-label="Reps"]').setValue('20')
     const weight = wrapper.get('input[aria-label="Weight in kg (optional)"]')
@@ -385,12 +392,12 @@ describe('exercise weight', () => {
   })
 
   it('edits an existing exercise in a dialog', async () => {
-    mountApp()
+    await mountConfig()
     expect(wrapper.find('dialog').exists()).toBe(false)
     await wrapper.get('button[aria-label="Edit Squats"]').trigger('click')
     const dialog = wrapper.get('dialog')
     expect((dialog.element as HTMLDialogElement).open).toBe(true)
-    expect((dialog.get('input[inputmode="numeric"]').element as HTMLInputElement).value).toBe('15')
+    expect((dialog.get('input[data-field="reps"]').element as HTMLInputElement).value).toBe('15')
 
     await dialog.get('input[inputmode="decimal"]').setValue('12')
     await dialog.get('form').trigger('submit')
@@ -399,7 +406,7 @@ describe('exercise weight', () => {
   })
 
   it('discards changes on Cancel', async () => {
-    mountApp()
+    await mountConfig()
     await wrapper.get('button[aria-label="Edit Squats"]').trigger('click')
     const dialog = wrapper.get('dialog')
     await dialog.get('input[inputmode="decimal"]').setValue('40')
@@ -412,14 +419,14 @@ describe('exercise weight', () => {
   })
 
   it('edits the name, reps and per-side count, keeping the goal', async () => {
-    mountApp()
+    await mountConfig()
     await wrapper.get('button[aria-label="Edit Kettlebell halos"]').trigger('click')
     const dialog = wrapper.get('dialog')
     const toggle = (name: string) =>
       dialog.findAll('button[aria-pressed]').find((b) => b.text() === name)!
     expect(toggle('each side, per set').attributes('aria-pressed')).toBe('true')
     await dialog.get('input:not([inputmode])').setValue('Halos')
-    await dialog.get('input[inputmode="numeric"]').setValue('1x0')
+    await dialog.get('input[data-field="reps"]').setValue('1x0')
     await toggle('per set').trigger('click')
     await dialog.get('form').trigger('submit')
     expect(detail('Halos')).toBe('10 reps / set')
@@ -427,30 +434,36 @@ describe('exercise weight', () => {
   })
 
   it('closes the dialog when another tab deletes the exercise', async () => {
-    mountApp()
+    await mountConfig()
     await wrapper.get('button[aria-label="Edit Squats"]').trigger('click')
     const store = usePlannerStore()
     localStorage.setItem(
-      'exercise-planner-v1',
-      JSON.stringify({ exercises: store.exercises.filter((e) => e.id !== 'sq'), log: {} }),
+      'exercise-planner-v2',
+      JSON.stringify({
+        plans: { '2026-10-19': store.exercises.filter((e) => e.id !== 'sq') },
+        log: {},
+      }),
     )
     window.dispatchEvent(
-      new StorageEvent('storage', { key: 'exercise-planner-v1', storageArea: localStorage }),
+      new StorageEvent('storage', { key: 'exercise-planner-v2', storageArea: localStorage }),
     )
     await wrapper.vm.$nextTick()
     expect(wrapper.find('dialog').exists()).toBe(false)
   })
 
   it('stays open when another tab changes a different exercise', async () => {
-    mountApp()
+    await mountConfig()
     await wrapper.get('button[aria-label="Edit Squats"]').trigger('click')
     const store = usePlannerStore()
     localStorage.setItem(
-      'exercise-planner-v1',
-      JSON.stringify({ exercises: store.exercises.filter((e) => e.id !== 'pu'), log: {} }),
+      'exercise-planner-v2',
+      JSON.stringify({
+        plans: { '2026-10-19': store.exercises.filter((e) => e.id !== 'pu') },
+        log: {},
+      }),
     )
     window.dispatchEvent(
-      new StorageEvent('storage', { key: 'exercise-planner-v1', storageArea: localStorage }),
+      new StorageEvent('storage', { key: 'exercise-planner-v2', storageArea: localStorage }),
     )
     await wrapper.vm.$nextTick()
     expect(wrapper.find('dialog').exists()).toBe(true)
@@ -459,5 +472,129 @@ describe('exercise weight', () => {
   it('offers no edit button for foods', () => {
     mountApp()
     expect(wrapper.find('button[aria-label="Edit Vegetables"]').exists()).toBe(false)
+  })
+})
+
+describe('config mode and weekly plans', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+    localStorage.clear()
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.open = true
+    }
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.open = false
+      this.dispatchEvent(new Event('close'))
+    }
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  const button = (text: string) => wrapper.findAll('button').find((b) => b.text() === text)
+
+  function chips(name: string): string {
+    const row = ex()
+      .findAll('[role="rowheader"]')
+      .find((r) => r.get('[data-testid="item-name"]').text() === name)!
+    return row
+      .findAll('[data-testid="item-detail"]')
+      .map((c) => c.text())
+      .join(' · ')
+  }
+
+  it('hides every editing control in normal mode but still ticks cells', async () => {
+    mountApp()
+    const toggle = wrapper.get('button[role="switch"]')
+    expect(toggle.attributes('aria-checked')).toBe('false')
+    expect(wrapper.find('button[aria-label^="Edit Squats"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label^="Remove"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label^="Raise"]').exists()).toBe(false)
+    expect(wrapper.find('input[aria-label="New exercise name"]').exists()).toBe(false)
+    expect(wrapper.find('input[aria-label="New food name"]').exists()).toBe(false)
+    expect(button('Copy plan to next week')).toBeUndefined()
+
+    await rowCells('Squats')[0]!.trigger('click')
+    expect(rowCells('Squats')[0]!.attributes('aria-pressed')).toBe('true')
+
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-checked')).toBe('true')
+    expect(wrapper.find('button[aria-label="Edit Squats"]').exists()).toBe(true)
+    expect(wrapper.find('button[aria-label="Remove Fish"]').exists()).toBe(true)
+    expect(wrapper.find('input[aria-label="New food name"]').exists()).toBe(true)
+  })
+
+  it('copies the plan to next week and shows it', async () => {
+    await mountConfig()
+    await wrapper.get('button[aria-label="Edit Squats"]').trigger('click')
+    const dialog = wrapper.get('dialog')
+    await dialog.get('input[data-field="sets"]').setValue('3')
+    await dialog.get('input[inputmode="decimal"]').setValue('12')
+    await dialog.get('form').trigger('submit')
+    expect(chips('Squats')).toBe('3 × 15 reps · 12 kg')
+
+    const confirm = vi.spyOn(window, 'confirm')
+    await button('Copy plan to next week')!.trigger('click')
+    expect(confirm).not.toHaveBeenCalled()
+    expect(wrapper.find('h1').text()).toBe('Oct 26 – Nov 1, 2026')
+    expect(chips('Squats')).toBe('3 × 15 reps · 12 kg')
+    expect(wrapper.find('[data-testid="carried-from"]').exists()).toBe(false)
+  })
+
+  it('asks before replacing a week that has its own plan', async () => {
+    await mountConfig()
+    await wrapper.get('button[title="Next week"]').trigger('click')
+    await rowCells('Squats')[0]!.trigger('click')
+    await wrapper.get('button[title="Previous week"]').trigger('click')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
+    await button('Copy plan to next week')!.trigger('click')
+    expect(confirm).toHaveBeenCalledWith(
+      'Replace the plan for Oct 26 – Nov 1, 2026 with this week’s?',
+    )
+    expect(wrapper.find('h1').text()).toBe('Oct 19 – Oct 25, 2026')
+  })
+
+  it('says when a week’s plan is carried over from an earlier week', async () => {
+    await mountConfig()
+    await wrapper.get('button[aria-label="Raise Squats goal"]').trigger('click')
+    await wrapper.get('button[title="Next week"]').trigger('click')
+    expect(wrapper.get('[data-testid="carried-from"]').text()).toContain('Oct 19 – Oct 25, 2026')
+    await wrapper.get('button[aria-label="Raise Squats goal"]').trigger('click')
+    expect(wrapper.find('[data-testid="carried-from"]').exists()).toBe(false)
+  })
+
+  it('names exercise and food sources separately once they differ', async () => {
+    await mountConfig()
+    await wrapper.get('button[aria-label="Raise Squats goal"]').trigger('click')
+    await wrapper.get('button[aria-label="Raise Fish goal"]').trigger('click')
+    await wrapper.get('button[title="Next week"]').trigger('click')
+    expect(wrapper.get('[data-testid="carried-from"]').text()).toBe(
+      'Uses the plan from Oct 19 – Oct 25, 2026 until you change this week.',
+    )
+    await rowCells('Squats')[0]!.trigger('click')
+    expect(wrapper.get('[data-testid="carried-from"]').text()).toBe(
+      'Uses the plan for foods from Oct 19 – Oct 25, 2026 until you change them this week.',
+    )
+  })
+
+  it('closes the edit dialog if the week changes under it', async () => {
+    await mountConfig()
+    await wrapper.get('button[aria-label="Edit Squats"]').trigger('click')
+    expect(wrapper.find('dialog').exists()).toBe(true)
+    usePlannerStore().nextWeek()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('dialog').exists()).toBe(false)
+  })
+
+  it('adds an exercise with sets from the form', async () => {
+    await mountConfig()
+    await wrapper.get('input[aria-label="New exercise name"]').setValue('Swings')
+    await wrapper.get('input[aria-label="Sets (optional)"]').setValue('4x')
+    await wrapper.get('input[aria-label="Reps"]').setValue('20')
+    await wrapper.get('form').trigger('submit')
+    expect(chips('Swings')).toBe('4 × 20 reps')
   })
 })

@@ -8,10 +8,12 @@
 ## 1. Overview
 
 A static Vue 3 SPA with no backend. Two Pinia stores hold all state and write it back to
-`localStorage`: `planner` (exercises, the visible week, settings) and `diet` (foods), which takes
-its week from `planner`. Both track the same thing, a tick per day against a weekly goal, through
-the pure helpers in `src/lib/tracker.ts`. `src/lib/dates.ts` holds the week maths (Monday of a week,
-`YYYY-MM-DD` keys, labels, `DAY_NAMES`); `src/lib/theme.ts` holds the theme names and `isDark`.
+`localStorage`: `planner` (exercise plans, the log, the visible week, settings, the mode) and `diet`
+(food plans and their log), which takes its week from `planner`. Both track the same thing, a tick
+per day against a weekly goal, through the pure helpers in `src/lib/tracker.ts`. `src/lib/plans.ts`
+decides which week's plan a week shows; `src/lib/dates.ts` holds the week maths (Monday of a week,
+`YYYY-MM-DD` keys and back, labels, `DAY_NAMES`); `src/lib/theme.ts` holds the theme names and
+`isDark`.
 
 `TrackerGrid`, `TrackerRow`, `DayCell` and `NumberStepper` take props, emit events, and serve both
 sections; `TrackerRow` also asks `window.confirm` before emitting `remove`. `ExerciseGrid` and
@@ -22,91 +24,122 @@ state and input cleaning through `useExerciseForm` (`src/composables/exerciseFor
 ```
 App.vue                 navbar + main column, --accent variable, .dark class, clock refresh,
 │                       cross-tab sync
-├── AppNavbar.vue       sticky top bar: app name, ‹ This Week ›, Settings, Print…
+├── AppNavbar.vue       sticky top bar: app name, ‹ This Week ›, Edit plan switch, Settings, Print…
 │   └── SettingsPopover.vue   theme (System/Light/Dark), accent swatches, exercises-per-day stepper
-├── WeekHeader.vue      H1 week label, daily-pick hint, grand total
-├── ExerciseGrid.vue    wires planner to a TrackerGrid: reps/weight chips, edit, "Picked / N" footer
+├── WeekHeader.vue      H1 week label, daily-pick hint, grand total; in config mode "Copy plan to
+│                       next week" and a note when the plan is carried over
+├── ExerciseGrid.vue    wires planner to a TrackerGrid: sets/reps/weight chips, edit, "Picked / N"
 │   ├── TrackerGrid.vue CSS grid: header row, one TrackerRow per item, footer counts
-│   │   └── TrackerRow.vue  name (+ optional chips), ✎ edit (if editable), × remove (confirms),
-│   │                       7 × DayCell, total + goal NumberStepper
-│   └── EditExerciseDialog.vue  native modal: name, reps, PerSideToggle, weight; Cancel / Save
-├── AddExerciseForm.vue name, digits-only reps, PerSideToggle, optional weight (kg), Add Exercise
+│   │   └── TrackerRow.vue  name (+ optional chips), 7 × DayCell, total; in config mode also
+│   │                       ✎ edit (if editable), × remove (confirms), goal NumberStepper
+│   └── EditExerciseDialog.vue  native modal: name, sets, reps, PerSideToggle, weight
+├── AddExerciseForm.vue config mode only: name, sets, reps, PerSideToggle, weight (kg)
 └── DietSection.vue     "Diet" heading with goals met
     ├── TrackerGrid.vue wired to diet: no chips, neutral "Eaten" footer
-    └── AddFoodForm.vue name, Add Food
+    └── AddFoodForm.vue config mode only: name, Add Food
 ```
 
-## 2. Stores
+## 2. Weekly plans
+
+Each week has its own **plan**: the exercises (with sets, reps, per-side, weight and goal) and the
+foods (with goals). Ticks live in a separate **log**, keyed by week and item id.
+
+- **Carry forward.** A week without a plan of its own shows the plan of the latest earlier week that
+  has one (`planSource` in `src/lib/plans.ts`); weeks before the first plan show the earliest one,
+  and with no plans at all the stores show the defaults. In config mode the header says which week
+  the plan comes from, naming the exercise and food sources separately when they differ.
+- **A week gets its own plan when it first changes**, ticks included: the store copies what the week
+  shows into `plans[week]` and edits that copy (`own()`). Until then, an unplanned week follows its
+  source, so changing this week's plan also changes the weeks ahead that haven't been touched.
+- **Copy plan to next week** (config mode) copies the visible week's exercises and foods into the
+  next week, replacing its plan after a confirmation if it had one, then shows that week.
+- Items keep their ids when copied, so a week's ticks stay attached to the same exercise or food.
+  Removing an item from one week leaves weeks with their own plan alone; its ticks stay in the log,
+  uncounted.
+
+## 3. Stores
 
 `usePlannerStore` is a setup store.
 
-| State                 | Persisted                      | Notes                                                   |
-| --------------------- | ------------------------------ | ------------------------------------------------------- |
-| `exercises`           | `exercise-planner-v1`          | `{ id, name, reps, perSide?, weight?, target }`         |
-| `log`                 | `exercise-planner-v1`          | week Monday `YYYY-MM-DD` → exercise id → seven booleans |
-| `accent`, `dailyPick` | `exercise-planner-settings-v1` | defaults `#30d158`, `3`                                 |
-| `theme`               | `exercise-planner-settings-v1` | `system` (default), `light` or `dark`                   |
-| `weekOffset`          | no                             | `0` is the current week                                 |
-| `now`                 | no                             | a ref so "today" can move; see §4                       |
+| State                 | Persisted                      | Notes                                                           |
+| --------------------- | ------------------------------ | --------------------------------------------------------------- |
+| `plans`               | `exercise-planner-v2`          | week → `{ id, name, sets?, reps, perSide?, weight?, target }[]` |
+| `log`                 | `exercise-planner-v2`          | week Monday `YYYY-MM-DD` → exercise id → seven booleans         |
+| `accent`, `dailyPick` | `exercise-planner-settings-v1` | defaults `#30d158`, `3`                                         |
+| `theme`               | `exercise-planner-settings-v1` | `system` (default), `light` or `dark`                           |
+| `configMode`          | no                             | `false` (normal mode) on every load                             |
+| `weekOffset`          | no                             | `0` is the current week                                         |
+| `now`                 | no                             | a ref so "today" can move; see §5                               |
 
-**Derived:** `monday`, `weekKey`, `label`, `days` (name, date, key, `isToday`), `dayCounts`,
-`grandTotal`, and the helpers `isDone(id, day)` and `totalFor(id)`. Totals count only exercises that
-still exist, so a removed exercise's history stays in `log` without inflating the numbers.
+**Derived:** `monday`, `weekKey`, `currentWeekKey`, `nextWeekKey`, `label`, `days` (name, date, key,
+`isToday`), `exercises` (the visible week's plan, see §2), `carriedFrom` (the source week, or null
+when the week has its own plan), `nextWeekHasPlan`, `dayCounts`, `grandTotal`, and the helpers
+`isDone(id, day)` and `totalFor(id)`. Totals count only the week's exercises, so a removed
+exercise's history stays in `log` without inflating the numbers.
 
-**Actions:** `toggle`, `changeTarget` (clamps 0–7), `addExercise` (returns `false` for an empty
-name; new exercises get goal 3), `updateExercise` (replaces name, reps, per-side and weight, keeping
-the id, goal and history; `false` for an empty name or unknown id), `removeExercise`, `prevWeek`,
-`nextWeek`, `thisWeek`, `refreshNow`, `syncFromStorage`, `setAccent`, `changeDailyPick` (clamps
-1–8), `setTheme`. The module also exports `exerciseDetails`, which gives the chips under a name:
-"10 reps / set" or "8 each side / set", then "12 kg" when a weight is set, or "—" for neither.
+**Actions** (plan edits apply to the visible week only): `toggle`, `changeTarget` (clamps 0–7),
+`addExercise` (returns `false` for an empty name; new exercises get goal 3), `updateExercise`
+(replaces name, sets, reps, per-side and weight, keeping the id, goal and history; `false` for an
+empty name or an id not in the week), `removeExercise`, `copyToNextWeek`, `setConfigMode`,
+`prevWeek`, `nextWeek`, `thisWeek`, `refreshNow`, `syncFromStorage`, `setAccent`, `changeDailyPick`
+(clamps 1–8), `setTheme`. The module also exports `exerciseDetails`, which gives the chips under a
+name: "3 × 10 reps" (or "10 reps / set" without sets, "3 sets" without reps, "8 each side" in place
+of "10 reps" when per side), then "12 kg" when weighted, or "—" for none of these.
 
-`useDietStore` holds `foods` (`{ id, name, target }`) and its own `log`, persisted together under
-`exercise-planner-diet-v1`. It reads `planner.weekKey`, so week navigation moves both sections. It
-derives `dayCounts`, `grandTotal` and `goalsMet`, and offers `isEaten`, `totalFor`, `toggle`,
-`changeTarget` (0–7), `addFood` (goal 3, `false` for an empty name), `removeFood` and
-`syncFromStorage`. Food goals work like exercise goals (met once the count reaches a non-zero goal);
-foods have no daily target.
+`useDietStore` holds `plans` of foods (`{ id, name, target }`) and its own `log`, persisted together
+under `exercise-planner-diet-v2`. It reads `planner.weekKey`, so week navigation moves both
+sections. It derives `foods`, `dayCounts`, `grandTotal`, `goalsMet` and `nextWeekHasPlan`, and
+offers `isEaten`, `totalFor`, `toggle`, `changeTarget` (0–7), `addFood` (goal 3, `false` for an
+empty name), `removeFood`, `copyToNextWeek` and `syncFromStorage`. Food goals work like exercise
+goals (met once the count reaches a non-zero goal); foods have no daily target.
 
 Watchers persist state: a deep one per data payload and a shallow one for the settings. `writeKey`
 skips the write when the stored string already matches, and swallows storage errors, so with storage
 blocked or full the app keeps working in memory.
 
-## 3. Storage format and validation
+## 4. Storage format and validation
 
-`exercise-planner-v1` uses the prototype's key, shape and key order, including its explicit
-`perSide: false`, so prototype data on the same origin loads and re-serialises byte for byte.
-Browsers isolate storage per origin, so data does not move between hosts. Settings
-(`exercise-planner-settings-v1`) and diet (`exercise-planner-diet-v1`) live under their own keys so
-the exercise payload stays prototype-compatible.
+Exercise data is `{ plans, log }` under `exercise-planner-v2`, diet data the same shape under
+`exercise-planner-diet-v2`, and settings `{ accent, dailyPick, theme }` under
+`exercise-planner-settings-v1`. Browsers isolate storage per origin, so data does not move between
+hosts.
 
-`parsePlannerData` (`src/lib/storage.ts`) validates the stored payload field by field:
+**Migration.** Before weekly plans, one list served every week: `{ exercises, log }` under
+`exercise-planner-v1` (the design prototype's key and shape) and `{ foods, log }` under
+`exercise-planner-diet-v1`. When a v2 key is missing and its v1 key exists, the store converts it:
+the list becomes the plan for every week in the log and for the current week, so every week looks as
+it did, and the result is saved as v2 at once. The v1 keys are never written or deleted. A v2 value
+that is not a JSON object also falls back to migrating v1 (or to the defaults without one); that
+result is saved on the next change. A tab still running the pre-v2 app keeps writing v1, which the
+new app no longer reads once v2 exists, so reload open tabs after updating.
 
-- Anything that is not a JSON object yields the five default exercises and an empty log.
-- `exercises` that is not an array restores the defaults; an empty array stays empty.
-- `weight` (kg) is kept only when it is a positive number, rounded to 2 decimals and capped at 500;
-  otherwise the key is left out, so prototype data never gains one.
-- Entries without a string `id` and `name` drop out; `reps` rounds and floors at 0; `target` rounds
+`parsePlannerData` (`src/lib/storage.ts`) validates field by field:
+
+- Plans whose week key is not `YYYY-MM-DD`, or whose value is not an array, drop out.
+- Items without a string `id` and `name` drop out; `reps` rounds and floors at 0; `target` rounds
   and clamps to 0–7, defaulting to 3.
+- `sets` is kept only as a whole number from 1 to 20 (larger values cap at 20); `weight` (kg) only
+  as a positive number, rounded to 2 decimals and capped at 500. Otherwise the key is left out.
 - Log weeks whose key is not `YYYY-MM-DD`, and entries that are not arrays, drop out; the rest
   normalise to exactly seven booleans.
+- When migrating, a v1 payload that is not a JSON object, or whose list is not an array, yields the
+  defaults; an empty list stays empty. The prototype trusted its stored data and crashed outright on
+  a payload without `log`.
 
-The prototype trusted its stored data and crashed outright on a payload without `log`.
+`parseDietData` applies the same rules to foods, with four default foods (Vegetables 7, Fruit 5,
+Fish 2, Nuts 3).
 
-`parseDietData` applies the same rules to `{ foods, log }`: four default foods (Vegetables 7, Fruit
-5, Fish 2, Nuts 3) when the payload or `foods` is unusable, and goals clamped to 0–7, defaulting
-to 3.
-
-`parseSettings` accepts any `#rrggbb` accent (not only the four swatches), clamps the daily pick
-to 1–8, and accepts only `system`, `light` or `dark` as the theme, falling back to the defaults
+`parseSettings` accepts any `#rrggbb` accent (not only the four swatches), clamps the daily pick to
+1–8, and accepts only `system`, `light` or `dark` as the theme, falling back to the defaults
 otherwise. Settings saved before the theme option existed load as `system`.
 
-## 4. Decisions beyond the design
+## 5. Decisions beyond the design
 
 - **Cells are buttons.** The prototype's cells were clickable `div`s. `DayCell` renders a `button`
   with `aria-pressed` and a label such as "Squats, Fri 23", so the grid works from the keyboard and
   with a screen reader. The grid carries ARIA `table`/`row`/`cell` roles.
-- **A normal web page, not a window.** The handoff drew the app as a macOS window (traffic lights,
-  a framed window on a backdrop). The app is an SPA, so it uses a full-width sticky navbar and a
+- **A normal web page, not a window.** The handoff drew the app as a macOS window (traffic lights, a
+  framed window on a backdrop). The app is an SPA, so it uses a full-width sticky navbar and a
   centred content column instead; the navbar keeps the week controls, Settings and Print….
 - **Light and dark themes.** The handoff is dark-only. Settings offers System (the default, which
   follows `prefers-color-scheme` live), Light and Dark. `App.vue` toggles a `dark` class on
@@ -118,11 +151,15 @@ otherwise. Settings saved before the theme option existed load as `system`.
   handoff records as the user's pick. It is a disclosure: an outside click or Escape closes it, and
   Escape returns focus to the trigger. Swatches, the theme buttons and the per-set toggle are
   `aria-pressed` buttons.
+- **Config mode and normal mode.** Normal mode, the default on every load, only ticks cells. The
+  "Edit plan" switch in the navbar (a `role="switch"` button) turns on config mode, which shows ✎,
+  ×, the goal steppers, the add forms and "Copy plan to next week". The mode is not saved, so the
+  app always opens ready for ticking.
 - **Exercises are editable.** The handoff had no way to change an exercise after adding it. A ✎
   button on each exercise row (not foods) opens `EditExerciseDialog`, a native `<dialog>` opened
-  with `showModal()`, which traps focus, closes on Escape and returns focus to the button. The
-  weight is optional and in kg; reps and weight show as separate chips so they wrap in the narrow
-  name column.
+  with `showModal()`, which traps focus, closes on Escape and returns focus to the button. Sets and
+  weight are optional, weight in kg; the sets/reps chip and the weight chip are separate so they
+  wrap in the narrow name column.
 - **Steppers mark their bounds** (goal 0/7, daily pick 1/8) with `aria-disabled` and ignore the
   click there. `disabled` would drop keyboard focus mid-press. The store still clamps as a backstop.
 - **Today refreshes.** A one-minute tick and `visibilitychange` both call `refreshNow`, which
@@ -135,12 +172,13 @@ otherwise. Settings saved before the theme option existed load as `system`.
   sheet. It has no daily target, so its footer counts are neutral rather than accent/orange.
 - **Print is black on white in either theme.** The print block in `src/styles/main.css` swaps the
   colour tokens for print values: off cells and the today column print white, and only done cells
-  print black with a white tick. The navbar, add forms, remove buttons and steppers are hidden
+  print black with a white tick. The navbar and every config-mode control are hidden
   (`data-noprint`), and each grid avoids splitting across pages.
-- **Narrow screens.** The navbar drops the app name below 640px so the controls fit at phone width;
-  the grid scrolls sideways at its 780px minimum width, as designed.
+- **Narrow screens.** Below 640px the navbar drops the app name and Print… and shortens the switch
+  label to "Edit"; below 380px a gear replaces the word Settings (still its accessible name), so the
+  controls fit a 320px screen. The grid scrolls sideways at its 780px minimum width, as designed.
 
-## 5. Styling
+## 6. Styling
 
 Tailwind CSS 4, through `@tailwindcss/vite`. Components style themselves with utility classes in
 their templates and have no `<style>` blocks. Everything global is in `src/styles/main.css`:
@@ -156,4 +194,4 @@ their templates and have no `<style>` blocks. Everything global is in `src/style
   `.btn-primary` and `.field` (the add forms) live in the components layer.
 - **Sticky navbar.** `scroll-padding-top` on `<html>` keeps keyboard-focused content from scrolling
   under it.
-- **Print.** The `@media print` block described in §4.
+- **Print.** The `@media print` block described in §5.

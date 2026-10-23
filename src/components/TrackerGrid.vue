@@ -14,6 +14,7 @@ defineProps<{
   detailsFor?: (item: Tracked) => string[]
   /** Adds an edit button to each row, which emits `edit`. */
   editable?: boolean
+  configMode: boolean
   footerLabel: string
   counts: { text: string; tone: CountTone }[]
   grandTotal: number
@@ -80,6 +81,7 @@ defineEmits<{
         :item="it"
         :details="detailsFor?.(it)"
         :editable="editable"
+        :config-mode="configMode"
         :days="days"
         :flags="flagsFor(it.id)"
         :total="totalFor(it.id)"

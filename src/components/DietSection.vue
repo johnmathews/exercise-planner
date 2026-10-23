@@ -46,6 +46,7 @@ function flagsFor(id: string): boolean[] {
       :flags-for="flagsFor"
       :total-for="diet.totalFor"
       footer-label="Eaten"
+      :config-mode="planner.configMode"
       :counts="counts"
       :grand-total="diet.grandTotal"
       data-testid="diet-grid"
@@ -53,6 +54,6 @@ function flagsFor(id: string): boolean[] {
       @change-target="diet.changeTarget"
       @remove="diet.removeFood"
     />
-    <AddFoodForm />
+    <AddFoodForm v-if="planner.configMode" />
   </section>
 </template>

@@ -5,7 +5,7 @@ import PerSideToggle from '@/components/PerSideToggle.vue'
 
 const store = usePlannerStore()
 const form = useExerciseForm()
-const { name, reps, weight, perSide } = form
+const { name, sets, reps, weight, perSide } = form
 
 function submit(): void {
   if (store.addExercise(form.value())) form.load()
@@ -19,6 +19,15 @@ function submit(): void {
       class="field min-w-0 flex-[1_1_220px]"
       placeholder="New exercise"
       aria-label="New exercise name"
+    />
+    <input
+      :value="sets"
+      maxlength="2"
+      class="field w-16"
+      placeholder="Sets"
+      inputmode="numeric"
+      aria-label="Sets (optional)"
+      @input="form.onSetsInput"
     />
     <input
       :value="reps"

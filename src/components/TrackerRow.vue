@@ -10,8 +10,10 @@ const props = defineProps<{
   item: Tracked
   /** Small chips under the name, e.g. "10 reps / set" and "12 kg". Omitted for foods. */
   details?: string[]
-  /** Shows an edit button that emits `edit`. */
+  /** Shows an edit button (in config mode) that emits `edit`. */
   editable?: boolean
+  /** Config mode shows the edit and remove buttons and the goal stepper. */
+  configMode: boolean
   days: Day[]
   flags: boolean[]
   total: number
@@ -54,7 +56,7 @@ function remove(): void {
         </div>
       </div>
       <button
-        v-if="editable"
+        v-if="configMode && editable"
         type="button"
         :class="ICON_BUTTON"
         title="Edit"
@@ -65,6 +67,7 @@ function remove(): void {
         ✎
       </button>
       <button
+        v-if="configMode"
         type="button"
         :class="ICON_BUTTON"
         title="Remove"
@@ -96,6 +99,7 @@ function remove(): void {
         {{ total }}<span class="text-xs text-faint"> / {{ item.target }}</span>
       </div>
       <NumberStepper
+        v-if="configMode"
         :value="item.target"
         :min="MIN_TARGET"
         :max="MAX_TARGET"

@@ -15,6 +15,12 @@ export function dateKey(d: Date): string {
   return `${d.getFullYear()}-${month}-${day}`
 }
 
+/** The local-time date for a `YYYY-MM-DD` key (the inverse of `dateKey`). */
+export function fromKey(key: string): Date {
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y!, m! - 1, d!)
+}
+
 export function addDays(d: Date, days: number): Date {
   const out = new Date(d)
   out.setDate(d.getDate() + days)

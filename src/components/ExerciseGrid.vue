@@ -40,6 +40,12 @@ watch(
     if (editing.value && !list.some((e) => e.id === editing.value!.id)) editing.value = null
   },
 )
+// Saving edits the visible week, so if the week changes under an open dialog (the clock passing
+// midnight on Sunday), close it rather than save into a week the user didn't open it for.
+watch(
+  () => store.weekKey,
+  () => (editing.value = null),
+)
 </script>
 
 <template>
@@ -52,6 +58,7 @@ watch(
     :total-for="store.totalFor"
     :details-for="detailsFor"
     editable
+    :config-mode="store.configMode"
     :footer-label="`Picked / ${store.dailyPick}`"
     :counts="counts"
     :grand-total="store.grandTotal"

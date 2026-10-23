@@ -56,7 +56,7 @@ onBeforeUnmount(() => {
   <main class="mx-auto max-w-6xl px-4 pb-16 sm:px-6 lg:px-8 print:max-w-none print:p-0">
     <WeekHeader />
     <ExerciseGrid />
-    <AddExerciseForm />
+    <AddExerciseForm v-if="store.configMode" />
     <DietSection />
   </main>
 </template>

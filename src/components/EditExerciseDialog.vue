@@ -10,7 +10,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const store = usePlannerStore()
 const form = useExerciseForm()
-const { name, reps, weight, perSide } = form
+const { name, sets, reps, weight, perSide } = form
 form.load(props.exercise)
 
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -41,8 +41,25 @@ function save(): void {
       </label>
       <div class="flex flex-wrap items-end gap-2">
         <label :class="LABEL">
+          Sets
+          <input
+            :value="sets"
+            maxlength="2"
+            class="field w-16"
+            inputmode="numeric"
+            data-field="sets"
+            @input="form.onSetsInput"
+          />
+        </label>
+        <label :class="LABEL">
           Reps
-          <input :value="reps" class="field w-20" inputmode="numeric" @input="form.onRepsInput" />
+          <input
+            :value="reps"
+            class="field w-20"
+            inputmode="numeric"
+            data-field="reps"
+            @input="form.onRepsInput"
+          />
         </label>
         <PerSideToggle v-model="perSide" />
       </div>

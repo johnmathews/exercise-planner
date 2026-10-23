@@ -89,7 +89,10 @@ describe('diet store', () => {
 
   it('adopts another tab’s diet write and ignores unrelated keys', () => {
     const d = useDietStore()
-    localStorage.setItem(DIET_KEY, JSON.stringify({ foods: [{ id: 'z', name: 'Z', target: 1 }] }))
+    localStorage.setItem(
+      DIET_KEY,
+      JSON.stringify({ plans: { '2026-10-19': [{ id: 'z', name: 'Z', target: 1 }] } }),
+    )
     d.syncFromStorage(DATA_KEY)
     expect(d.foods).toHaveLength(4)
     d.syncFromStorage(DIET_KEY)
@@ -97,5 +100,31 @@ describe('diet store', () => {
     localStorage.clear()
     d.syncFromStorage(null)
     expect(d.foods).toHaveLength(4)
+  })
+
+  it('carries food plans forward and copies them to the next week', () => {
+    const d = useDietStore()
+    const p = usePlannerStore()
+    d.addFood('Beans')
+    p.nextWeek()
+    expect(d.foods.map((f) => f.name)).toContain('Beans')
+    d.removeFood('fish')
+    p.prevWeek()
+    expect(d.nextWeekHasPlan).toBe(true)
+    expect(d.foods.map((f) => f.id)).toContain('fish')
+    d.copyToNextWeek()
+    p.nextWeek()
+    expect(d.foods.map((f) => f.id)).toContain('fish')
+  })
+
+  it('migrates the legacy diet key', () => {
+    localStorage.setItem(
+      'exercise-planner-diet-v1',
+      JSON.stringify({ foods: [{ id: 'z', name: 'Z', target: 2 }], log: {} }),
+    )
+    setActivePinia(createPinia())
+    const d = useDietStore()
+    expect(d.foods.map((f) => f.name)).toEqual(['Z'])
+    expect(stored(DIET_KEY)).toMatchObject({ plans: { '2026-10-19': [{ id: 'z' }] } })
   })
 })

@@ -15,10 +15,16 @@
 - **Diet.** Below the exercises, foods work the same way: tick each day you ate one, and its Week
   column counts days against a goal. The section header shows how many food goals are met. Defaults
   are Vegetables (7), Fruit (5), Fish (2) and Nuts (3).
-- Add an exercise with a name, an optional rep count, "per set" or "each side, per set", and an
-  optional weight in kg (e.g. squats with a 12 kg kettlebell); add a food by name. New items start
-  with a goal of 3. `✎` edits an exercise; `×` removes an item after a confirmation (its history
-  stays stored).
+- **Normal mode and config mode.** The app opens in normal mode, where you only tick cells. The
+  **Edit plan** switch in the top bar turns on config mode for changing the plan:
+  - add an exercise with a name, optional sets, reps, "per set" or "each side, per set", and an
+    optional weight in kg (e.g. squats with a 12 kg kettlebell); add a food by name;
+  - `✎` edits an exercise, `×` removes an item after a confirmation (its ticks stay stored), and
+    `−` / `+` change a weekly goal. New items start with a goal of 3.
+- **Weekly plans.** Each week has its own plan, so reps, sets, weights and goals can change from week
+  to week. A week you haven't changed carries over the latest earlier week's plan; it gets its own
+  copy the first time you change it or tick a cell. In config mode, **Copy plan to next week**
+  copies this week's exercises and foods over the next week's.
 - `‹` / `›` move between weeks for both sections; past weeks persist. **Print…** produces a
   black-on-white sheet.
 - **Settings** sets the theme (System, Light or Dark), the accent colour and the exercises-per-day
