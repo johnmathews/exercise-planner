@@ -148,9 +148,13 @@ describe('planner store', () => {
   it('syncFromStorage adopts another tab’s data and settings', () => {
     const s = usePlannerStore()
     localStorage.setItem(DATA_KEY, JSON.stringify({ exercises: [], log: {} }))
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ accent: '#ff9f0a', dailyPick: 5 }))
+    localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({ accent: '#ff9f0a', dailyPick: 5, theme: 'light' }),
+    )
     s.syncFromStorage(SETTINGS_KEY)
     expect(s.accent).toBe('#ff9f0a')
+    expect(s.theme).toBe('light')
     expect(s.exercises).toHaveLength(5)
     s.syncFromStorage(DATA_KEY)
     expect(s.exercises).toEqual([])
@@ -176,8 +180,16 @@ describe('planner store', () => {
     for (let i = 0; i < 10; i++) s.changeDailyPick(-1)
     expect(s.dailyPick).toBe(1)
     await nextTick()
-    expect(stored(SETTINGS_KEY)).toEqual({ accent: '#bf5af2', dailyPick: 1 })
+    expect(stored(SETTINGS_KEY)).toEqual({ accent: '#bf5af2', dailyPick: 1, theme: 'system' })
     expect(stored(DATA_KEY)).toBeNull()
+  })
+
+  it('persists the theme with the other settings', async () => {
+    const s = usePlannerStore()
+    expect(s.theme).toBe('system')
+    s.setTheme('dark')
+    await nextTick()
+    expect(stored(SETTINGS_KEY)).toEqual({ accent: '#30d158', dailyPick: 3, theme: 'dark' })
   })
 })
 

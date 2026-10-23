@@ -10,6 +10,9 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ change: [delta: number] }>()
 
+const BUTTON =
+  'h-5 w-6 text-xs text-muted hover:not-aria-disabled:bg-subtle hover:not-aria-disabled:text-fg aria-disabled:cursor-default aria-disabled:text-faint'
+
 // aria-disabled rather than disabled: a disabled button drops focus mid-press for keyboard users.
 function step(delta: number): void {
   const next = props.value + delta
@@ -18,9 +21,10 @@ function step(delta: number): void {
 </script>
 
 <template>
-  <div class="stepper">
+  <div class="flex overflow-hidden rounded-md border border-line bg-surface">
     <button
       type="button"
+      :class="BUTTON"
       :title="lowerTitle"
       :aria-label="lowerLabel"
       :aria-disabled="value <= min"
@@ -28,9 +32,10 @@ function step(delta: number): void {
     >
       −
     </button>
-    <div class="divider" />
+    <div class="w-px bg-line" />
     <button
       type="button"
+      :class="BUTTON"
       :title="raiseTitle"
       :aria-label="raiseLabel"
       :aria-disabled="value >= max"
@@ -40,37 +45,3 @@ function step(delta: number): void {
     </button>
   </div>
 </template>
-
-<style scoped>
-.stepper {
-  display: flex;
-  background: var(--window);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-button {
-  width: 24px;
-  height: 20px;
-  border: none;
-  background: transparent;
-  font-size: 12px;
-  color: var(--text-2);
-}
-
-button:hover:not([aria-disabled='true']) {
-  background: var(--border);
-  color: var(--text);
-}
-
-button[aria-disabled='true'] {
-  color: var(--text-3);
-  cursor: default;
-}
-
-.divider {
-  width: 1px;
-  background: var(--border);
-}
-</style>

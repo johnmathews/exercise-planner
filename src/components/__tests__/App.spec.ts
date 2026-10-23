@@ -42,18 +42,18 @@ describe('App', () => {
     expect(wrapper.find('h1').text()).toBe('Oct 19 – Oct 25, 2026')
     expect(
       ex()
-        .findAll('[role="rowheader"] .name')
+        .findAll('[data-testid="item-name"]')
         .map((n) => n.text()),
     ).toEqual(['Push-ups', 'Pull-ups', 'Squats', 'Back extensions', 'Kettlebell halos'])
-    const chips = wrapper.findAll('.chip').map((c) => c.text())
+    const chips = wrapper.findAll('[data-testid="item-detail"]').map((c) => c.text())
     expect(chips[0]).toBe('10 reps / set')
     expect(chips[4]).toBe('8 each side / set')
   })
 
   it('marks today’s column in the header and the cells', () => {
     mountApp()
-    const heads = ex().findAll('.day-head')
-    expect(heads.map((h) => h.classes('today'))).toEqual([
+    const heads = ex().findAll('[data-testid="day-head"]')
+    expect(heads.map((h) => h.attributes('data-today') === 'true')).toEqual([
       false,
       false,
       false,
@@ -62,7 +62,7 @@ describe('App', () => {
       false,
       false,
     ])
-    expect(rowCells('Squats')[4]!.element.parentElement!.classList.contains('today')).toBe(true)
+    expect(rowCells('Squats')[4]!.element.parentElement!.getAttribute('data-today')).toBe('true')
   })
 
   it('toggles a cell with aria-pressed and updates totals and footer counts', async () => {
@@ -81,25 +81,25 @@ describe('App', () => {
     mountApp()
     const counts = () => ex().findAll('[data-testid="day-count"]')
     for (const name of ['Push-ups', 'Pull-ups', 'Squats']) await rowCells(name)[0]!.trigger('click')
-    expect(counts()[0]!.classes()).toContain('met')
+    expect(counts()[0]!.attributes('data-tone')).toBe('met')
     await rowCells('Kettlebell halos')[0]!.trigger('click')
-    expect(counts()[0]!.classes()).toContain('over')
-    expect(counts()[1]!.classes()).toContain('under')
+    expect(counts()[0]!.attributes('data-tone')).toBe('over')
+    expect(counts()[1]!.attributes('data-tone')).toBe('under')
   })
 
   it('highlights the row total once the goal is reached, and steps the goal', async () => {
     mountApp()
     const total = () => ex().findAll('[data-testid="row-total"]')[3]!
     await rowCells('Back extensions')[0]!.trigger('click')
-    expect(total().classes()).not.toContain('met')
+    expect(total().attributes('data-met')).toBe('false')
     const lower = wrapper.get('button[aria-label="Lower Back extensions goal"]')
     await lower.trigger('click')
     await lower.trigger('click')
     expect(total().text()).toBe('1 / 1')
-    expect(total().classes()).toContain('met')
+    expect(total().attributes('data-met')).toBe('true')
     await lower.trigger('click')
     expect(total().text()).toBe('1 / 0')
-    expect(total().classes()).not.toContain('met')
+    expect(total().attributes('data-met')).toBe('false')
     expect(lower.attributes('aria-disabled')).toBe('true')
     await lower.trigger('click')
     expect(total().text()).toBe('1 / 0')
@@ -173,7 +173,7 @@ describe('App', () => {
     await wrapper.vm.$nextTick()
     expect(
       ex()
-        .findAll('[role="rowheader"] .name')
+        .findAll('[data-testid="item-name"]')
         .map((n) => n.text()),
     ).toEqual(['From other tab'])
     expect(wrapper.get('[data-testid="grand-total"]').text()).toBe('1')
@@ -197,7 +197,7 @@ describe('AddExerciseForm', () => {
       .find((b) => b.text() === 'each side, per set')!
       .trigger('click')
     await wrapper.get('form').trigger('submit')
-    expect(wrapper.findAll('.chip').at(-1)!.text()).toBe('12 each side / set')
+    expect(wrapper.findAll('[data-testid="item-detail"]').at(-1)!.text()).toBe('12 each side / set')
     expect(ex().findAll('[data-testid="row-total"]').at(-1)!.text()).toBe('0 / 3')
     expect(
       (wrapper.get('input[aria-label="New exercise name"]').element as HTMLInputElement).value,
@@ -211,14 +211,14 @@ describe('AddExerciseForm', () => {
     mountApp()
     await wrapper.get('input[aria-label="New exercise name"]').setValue('   ')
     await wrapper.get('form').trigger('submit')
-    expect(ex().findAll('[role="rowheader"] .name')).toHaveLength(5)
+    expect(ex().findAll('[data-testid="item-name"]')).toHaveLength(5)
   })
 
   it('shows an em dash when no reps are given', async () => {
     mountApp()
     await wrapper.get('input[aria-label="New exercise name"]').setValue('Plank')
     await wrapper.get('form').trigger('submit')
-    expect(wrapper.findAll('.chip').at(-1)!.text()).toBe('—')
+    expect(wrapper.findAll('[data-testid="item-detail"]').at(-1)!.text()).toBe('—')
   })
 })
 
@@ -245,7 +245,9 @@ describe('SettingsPopover', () => {
     expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#bf5af2')
 
     await wrapper.get('button[aria-label="More exercises per day"]').trigger('click')
-    expect(wrapper.find('.sub').text()).toBe('Pick 4 exercises a day. Click a cell when it’s done.')
+    expect(wrapper.find('[data-testid="pick-hint"]').text()).toBe(
+      'Pick 4 exercises a day. Click a cell when it’s done.',
+    )
     expect(ex().findAll('[data-testid="day-count"]')[0]!.text()).toBe('0/4')
 
     ;(wrapper.get('button[aria-label="Purple"]').element as HTMLElement).focus()
@@ -275,6 +277,73 @@ describe('SettingsPopover', () => {
     await fewer.trigger('click')
     expect(fewer.attributes('aria-disabled')).toBe('true')
     await fewer.trigger('click')
-    expect(wrapper.get('.pick-value').text()).toBe('1')
+    expect(wrapper.get('[data-testid="daily-pick"]').text()).toBe('1')
+  })
+})
+
+describe('theme', () => {
+  let listeners: ((ev: MediaQueryListEvent) => void)[]
+
+  /** jsdom has no matchMedia, so stand in for the OS colour-scheme query. */
+  function fakeColorScheme(dark: boolean): void {
+    listeners = []
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: dark,
+      media: query,
+      addEventListener: (_: string, fn: (ev: MediaQueryListEvent) => void) => listeners.push(fn),
+      removeEventListener: (_: string, fn: (ev: MediaQueryListEvent) => void) =>
+        (listeners = listeners.filter((l) => l !== fn)),
+    }))
+  }
+
+  function isDarkClass(): boolean {
+    return document.documentElement.classList.contains('dark')
+  }
+
+  beforeEach(() => localStorage.clear())
+  afterEach(() => {
+    wrapper?.unmount()
+    vi.unstubAllGlobals()
+    document.documentElement.classList.remove('dark')
+  })
+
+  it('follows the OS setting by default, including later changes', async () => {
+    fakeColorScheme(true)
+    mountApp()
+    expect(isDarkClass()).toBe(true)
+    listeners.forEach((fn) => fn({ matches: false } as MediaQueryListEvent))
+    await wrapper.vm.$nextTick()
+    expect(isDarkClass()).toBe(false)
+    wrapper.unmount()
+    expect(listeners).toHaveLength(0)
+  })
+
+  it('switches theme from the settings panel and remembers it', async () => {
+    fakeColorScheme(false)
+    mountApp()
+    expect(isDarkClass()).toBe(false)
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === 'Settings')!
+      .trigger('click')
+    const themeButton = (name: string) =>
+      wrapper
+        .get('[role="group"][aria-label="Theme"]')
+        .findAll('button')
+        .find((b) => b.text() === name)!
+
+    expect(themeButton('System').attributes('aria-pressed')).toBe('true')
+    await themeButton('Dark').trigger('click')
+    expect(isDarkClass()).toBe(true)
+    expect(themeButton('Dark').attributes('aria-pressed')).toBe('true')
+    expect(JSON.parse(localStorage.getItem('exercise-planner-settings-v1')!).theme).toBe('dark')
+
+    await themeButton('Light').trigger('click')
+    expect(isDarkClass()).toBe(false)
+  })
+
+  it('treats System as light where matchMedia is unavailable', () => {
+    mountApp()
+    expect(isDarkClass()).toBe(false)
   })
 })

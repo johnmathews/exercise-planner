@@ -3,8 +3,8 @@
 > Purpose
 >
 > A weekly workout and diet log: exercises and foods down the side, Monday–Sunday across the top,
-> one click to tick a day. Vue 3 + Vite single-page app; state lives in the browser's
-> `localStorage`.
+> one click to tick a day. Vue 3 + Vite + Tailwind single-page app with light and dark themes;
+> state lives in the browser's `localStorage`.
 
 ## 1. What it does
 
@@ -20,7 +20,8 @@
   stays stored).
 - `‹` / `›` move between weeks for both sections; past weeks persist. **Print…** produces a
   black-on-white sheet.
-- **Settings** sets the accent colour and the exercises-per-day target (1–8).
+- **Settings** sets the theme (System, Light or Dark), the accent colour and the exercises-per-day
+  target (1–8).
 
 ## 2. Getting started
 

@@ -11,7 +11,8 @@
   `Cannot read properties of null (reading 'edgesOut')` while resolving this dependency tree's peer
   sets. Install npm 11 first (`npm install -g npm@11`) or run it ad hoc with
   `npx -y npm@11 install`. CI and the Dockerfile both do the former.
-- Vue 3.5, Pinia 4, Vite 8, TypeScript 6, Vitest 4 with jsdom, ESLint 10 + oxlint, Prettier.
+- Vue 3.5, Pinia 4, Vite 8, Tailwind CSS 4, TypeScript 6, Vitest 4 with jsdom, ESLint 10 + oxlint,
+  Prettier with `prettier-plugin-tailwindcss`.
 
 ## 2. Scripts
 
@@ -33,11 +34,16 @@ The linters ignore `design_handoff_exercise_planner/`, which holds vendored prot
 
 ## 3. Conventions
 
-- Prettier (`.prettierrc.json`): no semicolons, single quotes, print width 100. `.editorconfig` sets
+- Prettier (`.prettierrc.json`): no semicolons, single quotes, print width 100. The Tailwind plugin
+  sorts class lists in templates; it reads the theme from `src/styles/main.css`. `.editorconfig` sets
   indentation for editors; `.vscode/extensions.json` recommends the Vue and lint extensions.
 - `@/` resolves to `src/` in Vite (`vite.config.ts`) and TypeScript (`tsconfig.app.json`).
-- Components use `<script setup lang="ts">` and scoped styles that read tokens from
-  `src/styles/tokens.css`; colours do not appear as literals except where the design fixes them.
+- Components use `<script setup lang="ts">` and Tailwind utility classes, with no `<style>` blocks.
+  Use the semantic colours (`bg-surface`, `text-muted`, `border-line`, …) from
+  `src/styles/main.css` rather than palette colours, so both themes work; a class list used more
+  than once in a component goes in a constant in its script.
+- Tests find elements by role, label, `data-testid` or state attributes (`data-today`, `data-tone`,
+  `data-met`, `data-on`, `aria-pressed`), never by styling classes.
 
 ## 4. Tests
 
@@ -49,6 +55,7 @@ Tests sit in `__tests__/` next to the code they cover:
   parsing, settings parsing, skip-unchanged writes, storage that throws.
 - `src/lib/__tests__/tracker.spec.ts`: the shared tick-per-day helpers (totals, day counts, goals
   met, toggling, ids).
+- `src/lib/__tests__/theme.spec.ts`: theme names and how System, Light and Dark resolve.
 - `src/stores/__tests__/planner.spec.ts`: toggling, totals, week navigation, goal clamping, adding,
   removal's effect on totals, persistence, settings, reps labels, the midnight refresh, and
   `syncFromStorage`.
@@ -57,7 +64,9 @@ Tests sit in `__tests__/` next to the code they cover:
 - `src/components/__tests__/App.spec.ts`: the mounted app in jsdom. Covers rendering, the today
   column, cell toggling and `aria-pressed`, footer colours, the goal stepper and its bounds,
   navigation, confirm-before-remove, print, the visibility and one-minute clock refresh, cross-tab
-  `storage` events, the add form, and the settings popover including focus return. Queries that
+  `storage` events, the add form, the settings popover including focus return, and the theme: the
+  `dark` class following the OS (with a stubbed `matchMedia`), the theme buttons and their
+  persistence. Queries that
   would also match the diet grid scope to `[data-testid="exercise-grid"]`; the rest rely on
   exercise-only labels or on the exercise form coming first in the DOM.
 - `src/components/__tests__/DietSection.spec.ts`: the diet section in the mounted app: default

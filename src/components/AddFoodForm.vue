@@ -11,10 +11,10 @@ function submit(): void {
 </script>
 
 <template>
-  <form class="form-row" data-noprint @submit.prevent="submit">
+  <form class="flex flex-wrap items-center gap-2 pt-4" data-noprint @submit.prevent="submit">
     <input
       v-model="name"
-      class="field field-grow"
+      class="field min-w-0 flex-[1_1_220px]"
       placeholder="New food"
       aria-label="New food name"
     />
