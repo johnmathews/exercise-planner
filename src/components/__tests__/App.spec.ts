@@ -505,7 +505,8 @@ describe('export and import', () => {
 })
 
 describe('export and import with the sample data', () => {
-  // Five weeks of edited plans, ticks, diet and non-default settings (fixtures/transfer/sample/).
+  // Four weeks of edited plans, ticks and diet over a five-week span, plus non-default settings
+  // (fixtures/transfer/sample/).
   const storage = readFixture<Record<string, unknown>>('sample/storage.json')
   const sample = readFixture<Record<string, unknown>>('sample/export.json')
 

@@ -62,8 +62,9 @@ Tests sit in `__tests__/` next to the code they cover:
   merging one), plus building an export, the merge summary and the download. Add a fixture rather
   than an inline case when the behaviour is part of the export contract, since the API's tests will
   read the same files.
-- `fixtures/transfer/sample/`: `storage.json` is a realistic `localStorage` snapshot. It covers five
-  weeks (2026-09-21 to 2026-10-19), plans edited over time (sets, weights, Back extensions removed,
+- `fixtures/transfer/sample/`: `storage.json` is a realistic `localStorage` snapshot. It spans five
+  weeks (2026-09-21 to 2026-10-19): four with data, and 2026-09-28 left empty so it carries the
+  plan before it forward. It has plans edited over time (sets, weights, Back extensions removed,
   Plank added), 102 ticks, a diet with an added food, and non-default settings. `export.json` is
   the export it must produce. `App.spec.ts` seeds the snapshot and checks Export gives
   `export.json`. It also imports `export.json` into an empty browser and checks the snapshot comes

@@ -7,8 +7,8 @@ plan, and so does a fresh browser, which made a thin export hard to tell apart f
 ## 1. What changed
 
 - `fixtures/transfer/sample/storage.json` is a realistic `localStorage` snapshot:
-  - five weeks, 2026-09-21 to 2026-10-19, with one week left untouched so it carries the plan
-    before it forward;
+  - a five-week span, 2026-09-21 to 2026-10-19: four weeks with data, and 2026-09-28 left
+    empty so it carries the plan before it forward;
   - plans that change over time: sets, then weights, Back extensions removed and Plank added;
   - 102 ticks, a diet with an added food (Eggs), and a blue accent, 4 per day and the dark theme.
 - `fixtures/transfer/sample/export.json` is the export that snapshot must produce.
