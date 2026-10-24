@@ -11,7 +11,7 @@
 static files are identical for every target, so it runs once, natively. The runtime stage is
 `nginxinc/nginx-unprivileged:1.29-alpine`, which runs as the non-root `nginx` user (uid 101) on port
 **8080**. `.dockerignore` keeps dependencies, build output, git and CI metadata, docs, the journal,
-the design handoff and local tooling directories out of the build context.
+the design handoff, local tooling directories, `api/` and `fixtures/` out of the build context.
 
 The image is multi-architecture (`linux/amd64`, `linux/arm64`). Only the runtime stage is assembled
 per target, and it holds nothing but `COPY` steps, so no QEMU emulation is needed.
@@ -80,8 +80,8 @@ All headers are set once at server level; `Cache-Control` varies through a `map`
 | `.github/workflows/ci.yml`     | pull request, push to `main` | `check`: lint, format, types, tests with coverage, build. `api`: ruff, mypy, pytest with coverage, `pip-audit` |
 | `.github/workflows/docker.yml` | pull request, push to `main` | `build` and `compose` on PRs; `publish` on `main`; build and publish run once per image                        |
 
-Both jobs build `linux/amd64` and `linux/arm64` for each image, so a PR proves the multi-arch build
-before `main` publishes it. For the API, the PR build also smoke-tests each architecture: the amd64
+`build` and `publish` build `linux/amd64` and `linux/arm64` for each image, so a PR proves the
+multi-arch build before `main` publishes it; `compose` builds for the runner's own architecture. For the API, the PR build also smoke-tests each architecture: the amd64
 image must answer `/api/healthz`, and the arm64 image, run under QEMU, must import its native
 modules. The `build` job builds without pushing and holds only `contents: read`. The `publish` job
 is the only one granted `packages: write`. It logs in to `ghcr.io` with `GITHUB_TOKEN` and pushes

@@ -82,7 +82,7 @@ happens when two devices tick the same carried-forward week and both create its 
 source. That write succeeds and returns the current `rev`. Items are validated with the same
 rules as stored data, so a bad item drops out rather than failing the write.
 
-**Ticks** set or clear one day for one item, so two devices ticking different days never collide.
+**Ticks** set or clear one day for one item (an item id of 1 to 128 characters), so two devices ticking different days never collide.
 `day` is 0 (Monday) to 6.
 
 **Import** applies the merge rule from `architecture.md` §4: existing weeks keep their plan, ticks
@@ -94,21 +94,25 @@ the client shows.
 
 - **No sign-up.** `ep-admin invite <username>` mints a single-use link,
   `$PUBLIC_ORIGIN/#/invite/<token>`, valid for 7 days. The person opens it and chooses a password
-  (10 to 256 characters). The username is fixed by the invite. `ep-admin reset <username>` mints a
+  (10 to 256 characters). The username is fixed by the invite: 1 to 32 letters, digits, `.`, `_`
+  or `-`, unique regardless of case. Inviting a name that already exists fails; use `reset`. `ep-admin reset <username>` mints a
   reset link the same way, valid for 24 hours. Using it ends every session of that user and clears
-  any lockout. Minting a new link for a username revokes its earlier unused ones. The token travels
+  any lockout. Minting a new link revokes the earlier unused links of the same kind for that
+  username (a new invite leaves a reset link alone, and the reverse). The token travels
   in the URL fragment and then in request bodies, never in a path, so no access log (Traefik, nginx
   or uvicorn) records it. Redeeming with a password outside 10 to 256 characters gets 400
   `password`, and a used, expired or unknown link gets 410 `gone`.
 - **Passwords** are hashed with argon2id at argon2-cffi's defaults (64 MiB, 3 passes,
   parallelism 4). One hash runs at a time (a process-wide semaphore), so concurrent logins queue
-  instead of multiplying memory. At most eight logins wait, each for at most five seconds. The rest
-  get 503 `busy` with `Retry-After: 1`, so a flood of logins cannot occupy every worker thread.
+  instead of multiplying memory. At most eight requests hold a place (one hashing, seven waiting,
+  logins and invite redemptions alike), each waiting at most five seconds. The rest get 503
+  `busy` with `Retry-After: 1`, so a flood of logins cannot occupy every worker thread.
 - **Lockout.** Five wrong passwords within 15 minutes lock the account for 15 minutes. While
   locked, every login gets 423 `locked`, even with the right password. A success resets the count.
   The lock is read again after the hash, under the write lock, so a burst of parallel guesses
   cannot get past it or clear it. An unknown username costs the same hash as a known one and gets
-  the same 401 `invalid`. Traefik's rate limit sits in front of all of it.
+  the same 401 `invalid`. So does a disabled user with the right password, and that attempt counts
+  towards the lockout. Traefik's rate limit sits in front of all of it.
 - **Sessions** are 32 random bytes in an `HttpOnly; Secure; SameSite=Lax; Path=/` cookie named
   `__Host-session`. They last 90 days from the last use: a request more than a day after the last
   refresh moves the expiry forward and re-sends the cookie. Logout ends one session.
@@ -188,6 +192,19 @@ uv run pytest                            # tests
 uv run coverage run -m pytest && uv run coverage report   # fails under 98%
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
-PUBLIC_ORIGIN=http://127.0.0.1:5173 COOKIE_SECURE=false DATA_DIR=./.data \
+PUBLIC_ORIGIN=http://localhost:5173 COOKIE_SECURE=false DATA_DIR=./.data \
   uv run uvicorn --factory exercise_planner_api.app:create_app_from_env --port 8000
 ```
+
+Tests sit in `api/tests/`:
+
+- `test_parity.py`: every case in `fixtures/transfer/`, the same files Vitest runs, plus the
+  deliberate divergences from JavaScript (§9).
+- `test_api.py`: the HTTP layer: the write guard, error shapes, body limits (chunked too), every
+  data endpoint, user isolation, `X-Expected-User`, import and export (the sample round trip).
+- `test_auth.py`: hashing one at a time and the busy queue, login, lockout and its window and
+  races, sessions sliding and expiring, invite and reset links, races between redemptions.
+- `test_db.py`, `test_config.py`, `test_backup.py`, `test_cli.py`: migrations (including racing
+  ones and the WAL switch), configuration from the environment, daily copies, `ep-admin`.
+- `conftest.py` gives each test a temporary database, a controllable clock and a cheap hasher;
+  `fixtures.py` reads `fixtures/transfer/`.
