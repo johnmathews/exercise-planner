@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import App from '@/App.vue'
 import { usePlannerStore } from '@/stores/planner'
@@ -285,6 +285,221 @@ describe('SettingsPopover', () => {
     expect(fewer.attributes('aria-disabled')).toBe('true')
     await fewer.trigger('click')
     expect(wrapper.get('[data-testid="daily-pick"]').text()).toBe('1')
+  })
+})
+
+describe('export and import', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+    localStorage.clear()
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  const EXPORT = {
+    format: 'exercise-planner-export',
+    version: 1,
+    exercise: {
+      plans: {
+        '2026-10-12': [{ id: 'sq', name: 'Squats', reps: 15, target: 4 }],
+        '2026-10-19': [{ id: 'sq', name: 'Squats', reps: 15, target: 4 }],
+      },
+      log: { '2026-10-19': { sq: [true, true, false, false, false, false, false] } },
+    },
+    diet: {
+      plans: { '2026-10-19': [{ id: 'eggs', name: 'Eggs', target: 2 }] },
+      log: { '2026-10-19': { eggs: [false, false, true, false, false, false, false] } },
+    },
+    settings: { accent: '#bf5af2', dailyPick: 2 },
+  }
+
+  async function openSettings(): Promise<void> {
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().endsWith('Settings'))!
+      .trigger('click')
+  }
+
+  function button(name: string) {
+    return wrapper.findAll('button').find((b) => b.text() === name)!
+  }
+
+  /** jsdom cannot open a file picker; hand the input a file and fire `change`. */
+  async function choose(file: File): Promise<void> {
+    const input = wrapper.get('[data-testid="import-file"]')
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+  }
+
+  function jsonFile(data: unknown): File {
+    return new File([JSON.stringify(data)], 'export.json', { type: 'application/json' })
+  }
+
+  it('exports the plans, ticks and settings as a dated JSON file', async () => {
+    let blob: Blob | undefined
+    URL.createObjectURL = vi.fn<(b: Blob) => string>((b) => {
+      blob = b
+      return 'blob:x'
+    })
+    URL.revokeObjectURL = vi.fn<(url: string) => void>()
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    mountApp()
+    await rowCells('Squats')[2]!.trigger('click')
+    await openSettings()
+    await button('Export').trigger('click')
+    expect(click).toHaveBeenCalledOnce()
+    expect((click.mock.contexts[0] as HTMLAnchorElement).download).toBe(
+      'exercise-planner-2026-10-23.json',
+    )
+    const file = JSON.parse(await blob!.text())
+    expect(file).toMatchObject({
+      format: 'exercise-planner-export',
+      version: 1,
+      settings: { accent: '#30d158', dailyPick: 3 },
+    })
+    expect(file.settings).not.toHaveProperty('theme')
+    expect(file.exercise.log['2026-10-19'].sq[2]).toBe(true)
+    expect(file.diet).toEqual({ plans: {}, log: {} })
+  })
+
+  it('opens the file picker from Import…', async () => {
+    mountApp()
+    await openSettings()
+    const picker = vi.spyOn(
+      wrapper.get('[data-testid="import-file"]').element as HTMLInputElement,
+      'click',
+    )
+    await button('Import…').trigger('click')
+    expect(picker).toHaveBeenCalledOnce()
+  })
+
+  it('summarises what a file adds, then merges it on Import', async () => {
+    mountApp()
+    await rowCells('Push-ups')[4]!.trigger('click')
+    await openSettings()
+    await wrapper.get('button[aria-label="Blue"]').trigger('click')
+    await choose(jsonFile(EXPORT))
+    // The tick gave this week its own plan, so only last week's exercise plan and this week's food
+    // plan are new. Picking Blue saved settings, so the file's accent and daily pick don't apply.
+    expect(wrapper.get('[data-testid="import-summary"]').text()).toBe(
+      'Adds 2 weekly plans and 3 ticks. Existing plans and ticks stay as they are.',
+    )
+    expect(rowCells('Squats')[0]!.attributes('aria-pressed')).toBe('false')
+
+    await button('Import').trigger('click')
+    expect(wrapper.get('[role="status"]').text()).toBe('Imported.')
+    expect(wrapper.find('[data-testid="import-summary"]').exists()).toBe(false)
+    expect(rowCells('Squats')[0]!.attributes('aria-pressed')).toBe('true')
+    expect(rowCells('Push-ups')[4]!.attributes('aria-pressed')).toBe('true')
+    expect(rowCells('Eggs')[2]!.attributes('aria-pressed')).toBe('true')
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#0a84ff')
+  })
+
+  it('applies the file’s settings when this browser has none saved', async () => {
+    mountApp()
+    await openSettings()
+    await choose(jsonFile(EXPORT))
+    expect(wrapper.get('[data-testid="import-summary"]').text()).toBe(
+      'Adds 3 weekly plans and 3 ticks, plus the accent and exercises per day. Existing plans and ticks stay as they are.',
+    )
+    await button('Import').trigger('click')
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#bf5af2')
+    expect(wrapper.get('[data-testid="daily-pick"]').text()).toBe('2')
+  })
+
+  it('uses the singular for one plan and one tick', async () => {
+    mountApp()
+    await openSettings()
+    await wrapper.get('button[aria-label="Blue"]').trigger('click')
+    await choose(
+      jsonFile({
+        format: 'exercise-planner-export',
+        version: 1,
+        exercise: {
+          plans: { '2026-10-12': [] },
+          log: { '2026-10-19': { pu: [true, false, false, false, false, false, false] } },
+        },
+      }),
+    )
+    expect(wrapper.get('[data-testid="import-summary"]').text()).toBe(
+      'Adds 1 weekly plan and 1 tick. Existing plans and ticks stay as they are.',
+    )
+  })
+
+  it('keeps the summary true when settings change while it is open', async () => {
+    mountApp()
+    await openSettings()
+    await choose(jsonFile(EXPORT))
+    expect(wrapper.get('[data-testid="import-summary"]').text()).toContain('plus the accent')
+    await wrapper.get('button[aria-label="Blue"]').trigger('click')
+    expect(wrapper.get('[data-testid="import-summary"]').text()).not.toContain('plus the accent')
+    await button('Import').trigger('click')
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#0a84ff')
+  })
+
+  it('discards the file on Cancel', async () => {
+    mountApp()
+    await openSettings()
+    await choose(jsonFile(EXPORT))
+    await button('Cancel').trigger('click')
+    expect(wrapper.find('[data-testid="import-summary"]').exists()).toBe(false)
+    expect(rowCells('Squats')[0]!.attributes('aria-pressed')).toBe('false')
+    expect(localStorage.getItem('exercise-planner-v2')).toBeNull()
+  })
+
+  it('says so when the file adds nothing', async () => {
+    mountApp()
+    await openSettings()
+    await choose(jsonFile({ format: 'exercise-planner-export', version: 1 }))
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      'Nothing new: everything in that file is already here.',
+    )
+    expect(wrapper.find('[data-testid="import-summary"]').exists()).toBe(false)
+  })
+
+  it.each([
+    ['not JSON', new File(['{oops'], 'x.json'), 'That file isn’t valid JSON.'],
+    ['another format', jsonFile({ plans: {} }), 'That file isn’t an Exercise Planner export.'],
+    [
+      'a newer version',
+      jsonFile({ format: 'exercise-planner-export', version: 2 }),
+      'That export comes from a newer version of the app.',
+    ],
+  ])('rejects %s with an inline error and changes nothing', async (_, file, message) => {
+    mountApp()
+    await openSettings()
+    await choose(file)
+    const alert = wrapper.get('[role="alert"]')
+    expect(alert.text()).toBe(message)
+    expect(alert.attributes('data-tone')).toBe('error')
+    expect(localStorage.length).toBe(0)
+  })
+
+  it('reports a file that cannot be read', async () => {
+    mountApp()
+    await openSettings()
+    const file = jsonFile(EXPORT)
+    vi.spyOn(file, 'text').mockRejectedValue(new Error('gone'))
+    await choose(file)
+    expect(wrapper.get('[role="alert"]').text()).toBe('That file couldn’t be read.')
+  })
+
+  it('ignores a change with no file, and clears the outcome when reopened', async () => {
+    mountApp()
+    await openSettings()
+    await wrapper.get('[data-testid="import-file"]').trigger('change')
+    await flushPromises()
+    expect(wrapper.find('[role="alert"], [role="status"]').exists()).toBe(false)
+    await choose(new File(['{oops'], 'x.json'))
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+    await openSettings()
+    await openSettings()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
 })
 

@@ -1,0 +1,18 @@
+{
+  "description": "Settings that are not an object mean no settings; sections that are not objects are empty.",
+  "input": {
+    "format": "exercise-planner-export",
+    "version": 1,
+    "exercise": "nope",
+    "diet": [],
+    "settings": "blue"
+  },
+  "expected": {
+    "ok": true,
+    "data": {
+      "exercise": { "plans": {}, "log": {} },
+      "diet": { "plans": {}, "log": {} },
+      "settings": null
+    }
+  }
+}

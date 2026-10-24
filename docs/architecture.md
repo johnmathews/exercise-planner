@@ -25,7 +25,8 @@ state and input cleaning through `useExerciseForm` (`src/composables/exerciseFor
 App.vue                 navbar + main column, --accent variable, .dark class, clock refresh,
 │                       cross-tab sync
 ├── AppNavbar.vue       sticky top bar: app name, ‹ This Week ›, Edit plan switch, Settings, Print…
-│   └── SettingsPopover.vue   theme (System/Light/Dark), accent swatches, exercises-per-day stepper
+│   └── SettingsPopover.vue   theme (System/Light/Dark), accent swatches, exercises-per-day stepper,
+│                             Export and Import… (see §4)
 ├── WeekHeader.vue      H1 week label, daily-pick hint, grand total; in config mode "Copy plan to
 │                       next week" and a note when the plan is carried over
 ├── ExerciseGrid.vue    wires planner to a TrackerGrid: sets/reps/weight chips, edit, "Picked / N"
@@ -82,16 +83,17 @@ exercise's history stays in `log` without inflating the numbers.
 (replaces name, sets, reps, per-side and weight, keeping the id, goal and history; `false` for an
 empty name or an id not in the week), `removeExercise`, `copyToNextWeek`, `setConfigMode`,
 `prevWeek`, `nextWeek`, `thisWeek`, `refreshNow`, `syncFromStorage`, `setAccent`, `changeDailyPick`
-(clamps 1–8), `setTheme`. The module also exports `exerciseDetails`, which gives the chips under a
-name: "3 × 10 reps" (or "10 reps / set" without sets, "3 sets" without reps, "8 each side" in place
-of "10 reps" when per side), then "12 kg" when weighted, or "—" for none of these.
+(clamps 1–8), `setTheme`, `importData` (merges an export into the plans, log and settings; see §4)
+and `savedSettings`. The module also exports `exerciseDetails`, which gives the chips under a name:
+"3 × 10 reps" (or "10 reps / set" without sets, "3 sets" without reps, "8 each side" in place of
+"10 reps" when per side), then "12 kg" when weighted, or "—" for none of these.
 
 `useDietStore` holds `plans` of foods (`{ id, name, target }`) and its own `log`, persisted together
 under `exercise-planner-diet-v2`. It reads `planner.weekKey`, so week navigation moves both
 sections. It derives `foods`, `dayCounts`, `grandTotal`, `goalsMet` and `nextWeekHasPlan`, and
 offers `isEaten`, `totalFor`, `toggle`, `changeTarget` (0–7), `addFood` (goal 3, `false` for an
-empty name), `removeFood`, `copyToNextWeek` and `syncFromStorage`. Food goals work like exercise
-goals (met once the count reaches a non-zero goal); foods have no daily target.
+empty name), `removeFood`, `copyToNextWeek`, `syncFromStorage` and `importData`. Food goals work
+like exercise goals (met once the count reaches a non-zero goal); foods have no daily target.
 
 Watchers persist state: a deep one per data payload and a shallow one for the settings. `writeKey`
 skips the write when the stored string already matches, and swallows storage errors, so with storage
@@ -133,6 +135,44 @@ Fish 2, Nuts 3).
 1–8, and accepts only `system`, `light` or `dark` as the theme, falling back to the defaults
 otherwise. Settings saved before the theme option existed load as `system`.
 
+**Export and import.** Settings → Export downloads `exercise-planner-YYYY-MM-DD.json`:
+
+```json
+{
+  "format": "exercise-planner-export",
+  "version": 1,
+  "exportedAt": "2026-10-24T09:30:00.000Z",
+  "exercise": { "plans": {}, "log": {} },
+  "diet": { "plans": {}, "log": {} },
+  "settings": { "accent": "#30d158", "dailyPick": 3 }
+}
+```
+
+The theme is not exported, because it belongs to the device rather than the person. Import… reads a
+file through `parseExport` (`src/lib/transfer.ts`), which rejects anything that is not JSON, has
+another `format`, or has a `version` other than 1. It validates the rest with the same normalisers
+as storage, so a hand-edited file loads the way a hand-edited `localStorage` value would. Missing
+`settings`, or settings that are not an object, mean "no settings".
+
+An import **merges and never deletes** (`mergeTracked`, `mergeSettings`):
+
+- A week that already has a plan keeps it; a week with no plan takes the file's.
+- Ticks are OR-ed per week, item and day, so an import can add ticks but never clears one.
+- The file's accent and daily pick apply only when this browser has no saved settings yet: none
+  were stored when the app loaded, and none have been changed or imported since. Tracking this in
+  the store rather than re-reading the key keeps it right when storage is blocked. An import that
+  applies settings saves them, so a second import does not offer them again.
+
+The confirm step names how many weeks and ticks the file adds (`mergeSummary`) before anything is
+written. It is computed from the current state, so it stays right if another tab or a settings
+change lands while it is open. Importing the same file twice adds nothing the second time. Adding a week can change what
+an unplanned week carries forward from (§2). The import took its history from the file, so that is
+the intended result.
+
+`fixtures/transfer/` holds the parse and merge cases as JSON, each with its expected result.
+`src/lib/__tests__/transfer.spec.ts` runs every case. The format is the contract for the API's
+import and export as well, so the API's tests will run the same files.
+
 ## 5. Decisions beyond the design
 
 - **Cells are buttons.** The prototype's cells were clickable `div`s. `DayCell` renders a `button`
@@ -165,6 +205,9 @@ otherwise. Settings saved before the theme option existed load as `system`.
 - **Today refreshes.** A one-minute tick and `visibilitychange` both call `refreshNow`, which
   updates `now` only when the date has changed. A tab left open past midnight moves its highlighted
   column within a minute.
+- **Export and import live in Settings.** Data is per browser, so the export file is the way to
+  back it up or move it to another origin (the dev server's data has no other way out). Import is
+  additive by design: restoring an old backup over newer data cannot lose the newer data.
 - **Tabs stay in sync.** `App.vue` listens for `storage` events and calls both stores'
   `syncFromStorage`, so a stale tab adopts another tab's edits instead of overwriting them with its
   old state.

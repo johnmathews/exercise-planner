@@ -1,0 +1,5 @@
+{
+  "description": "A JSON object with another format marker is rejected.",
+  "input": { "format": "something-else", "version": 1 },
+  "expected": { "ok": false, "error": "format" }
+}

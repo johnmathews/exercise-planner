@@ -1,0 +1,23 @@
+{
+  "description": "The file's accent and daily pick apply only when no settings are saved yet; existing is null when none are.",
+  "cases": [
+    {
+      "description": "Nothing saved: the file's settings apply.",
+      "existing": null,
+      "incoming": { "accent": "#0a84ff", "dailyPick": 4 },
+      "expected": { "accent": "#0a84ff", "dailyPick": 4 }
+    },
+    {
+      "description": "Saved settings win over the file's.",
+      "existing": { "accent": "#30d158", "dailyPick": 3 },
+      "incoming": { "accent": "#0a84ff", "dailyPick": 4 },
+      "expected": { "accent": "#30d158", "dailyPick": 3 }
+    },
+    {
+      "description": "Nothing saved and nothing in the file: still nothing.",
+      "existing": null,
+      "incoming": null,
+      "expected": null
+    }
+  ]
+}

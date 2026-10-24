@@ -78,7 +78,7 @@ export function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
 }
 
-function isRecord(v: unknown): v is Record<string, unknown> {
+export function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
@@ -86,7 +86,7 @@ function toInt(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : fallback
 }
 
-function parseJson(raw: string | null): unknown {
+export function parseJson(raw: string | null): unknown {
   if (raw === null) return null
   try {
     return JSON.parse(raw)
@@ -103,7 +103,7 @@ export function normaliseWeight(v: unknown): number | undefined {
   return kg > 0 ? Math.min(MAX_WEIGHT, kg) : undefined
 }
 
-function normaliseExercise(v: unknown): Exercise | null {
+export function normaliseExercise(v: unknown): Exercise | null {
   if (!isRecord(v) || typeof v.id !== 'string' || typeof v.name !== 'string') return null
   const weight = normaliseWeight(v.weight)
   const sets = toInt(v.sets, 0)
@@ -118,7 +118,7 @@ function normaliseExercise(v: unknown): Exercise | null {
   }
 }
 
-function normaliseFood(v: unknown): Food | null {
+export function normaliseFood(v: unknown): Food | null {
   if (!isRecord(v) || typeof v.id !== 'string' || typeof v.name !== 'string') return null
   return {
     id: v.id,
@@ -127,7 +127,7 @@ function normaliseFood(v: unknown): Food | null {
   }
 }
 
-function normaliseLog(v: unknown): Log {
+export function normaliseLog(v: unknown): Log {
   const log: Log = {}
   if (!isRecord(v)) return log
   for (const [week, entries] of Object.entries(v)) {
@@ -142,7 +142,7 @@ function normaliseLog(v: unknown): Log {
   return log
 }
 
-function normalisePlans<T>(v: unknown, normalise: (item: unknown) => T | null): Plans<T> {
+export function normalisePlans<T>(v: unknown, normalise: (item: unknown) => T | null): Plans<T> {
   const plans: Plans<T> = {}
   if (!isRecord(v)) return plans
   for (const [week, items] of Object.entries(v)) {
@@ -152,7 +152,7 @@ function normalisePlans<T>(v: unknown, normalise: (item: unknown) => T | null): 
   return plans
 }
 
-type TrackedData<T> = { plans: Plans<T>; log: Log }
+export type TrackedData<T> = { plans: Plans<T>; log: Log }
 
 /**
  * Coerce stored data into `{ plans, log }`, each field falling back on its own. Without v2 data, a
@@ -202,20 +202,28 @@ export function parseDietData(
   return parseTracked(raw, legacyRaw, currentWeek, 'foods', normaliseFood, defaultFoods)
 }
 
-export function parseSettings(raw: string | null): Settings {
-  const parsed = parseJson(raw)
-  if (!isRecord(parsed)) return { ...DEFAULT_SETTINGS }
+/** The settings that belong to the person rather than the device: everything but the theme. */
+export type PortableSettings = Pick<Settings, 'accent' | 'dailyPick'>
+
+/** Any `#rrggbb` accent and a daily pick clamped to 1–8, each falling back to its default. */
+export function normalisePortableSettings(v: Record<string, unknown>): PortableSettings {
   const accent =
-    typeof parsed.accent === 'string' && /^#[0-9a-f]{6}$/i.test(parsed.accent)
-      ? parsed.accent
+    typeof v.accent === 'string' && /^#[0-9a-f]{6}$/i.test(v.accent)
+      ? v.accent
       : DEFAULT_SETTINGS.accent
   const dailyPick = clamp(
-    toInt(parsed.dailyPick, DEFAULT_SETTINGS.dailyPick),
+    toInt(v.dailyPick, DEFAULT_SETTINGS.dailyPick),
     MIN_DAILY_PICK,
     MAX_DAILY_PICK,
   )
+  return { accent, dailyPick }
+}
+
+export function parseSettings(raw: string | null): Settings {
+  const parsed = parseJson(raw)
+  if (!isRecord(parsed)) return { ...DEFAULT_SETTINGS }
   const theme = isTheme(parsed.theme) ? parsed.theme : DEFAULT_SETTINGS.theme
-  return { accent, dailyPick, theme }
+  return { ...normalisePortableSettings(parsed), theme }
 }
 
 /** `localStorage` can throw (private mode, blocked site data); the app must still run. */

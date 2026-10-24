@@ -1,0 +1,5 @@
+{
+  "description": "A raw localStorage payload ({ plans, log }) is not an export.",
+  "input": { "plans": {}, "log": {} },
+  "expected": { "ok": false, "error": "format" }
+}

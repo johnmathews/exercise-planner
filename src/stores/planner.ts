@@ -28,8 +28,11 @@ import {
   writeKey,
   type Exercise,
   type Log,
+  type PlannerData,
+  type PortableSettings,
 } from '@/lib/storage'
 import * as tracker from '@/lib/tracker'
+import { mergeSettings, mergeTracked } from '@/lib/transfer'
 import type { Theme } from '@/lib/theme'
 import { copyPlan, planSource, type Plans } from '@/lib/plans'
 
@@ -82,6 +85,8 @@ export const usePlannerStore = defineStore('planner', () => {
     parsePlannerData(readKey(DATA_KEY), readKey(LEGACY_DATA_KEY), currentWeekKey.value)
   const data = loadData()
   const settings = parseSettings(readKey(SETTINGS_KEY))
+  /** Whether settings were stored or changed; tracked here so blocked storage can't hide a change. */
+  const settingsSaved = ref(readKey(SETTINGS_KEY) !== null)
 
   const plans = ref<Plans<Exercise>>(data.plans)
   const log = ref<Log>(data.log)
@@ -206,6 +211,7 @@ export const usePlannerStore = defineStore('planner', () => {
       log.value = fresh.log
     }
     if (key === null || key === SETTINGS_KEY) {
+      settingsSaved.value = readKey(SETTINGS_KEY) !== null
       const fresh = parseSettings(readKey(SETTINGS_KEY))
       accent.value = fresh.accent
       dailyPick.value = fresh.dailyPick
@@ -223,17 +229,34 @@ export const usePlannerStore = defineStore('planner', () => {
     theme.value = next
   }
 
+  /** The accent and daily pick, or null while no settings have been stored, changed or imported. */
+  function savedSettings(): PortableSettings | null {
+    return settingsSaved.value ? { accent: accent.value, dailyPick: dailyPick.value } : null
+  }
+
+  /** Merges an export in without deleting anything (`mergeTracked`, `mergeSettings`). */
+  function importData(exercise: PlannerData, incoming: PortableSettings | null): void {
+    const merged = mergeTracked({ plans: plans.value, log: log.value }, exercise)
+    plans.value = merged.plans
+    log.value = merged.log
+    const next = mergeSettings(savedSettings(), incoming)
+    if (next && !settingsSaved.value) {
+      accent.value = next.accent
+      dailyPick.value = next.dailyPick
+      // Save even when the values equal the defaults, which the watcher below would skip.
+      saveSettings()
+    }
+  }
+
   const save = () => writeKey(DATA_KEY, { plans: plans.value, log: log.value })
   watch([plans, log], save, { deep: true })
   // Save a migration from the legacy key straight away, so it runs only once.
   if (readKey(DATA_KEY) === null && readKey(LEGACY_DATA_KEY) !== null) save()
-  watch([accent, dailyPick, theme], () =>
-    writeKey(SETTINGS_KEY, {
-      accent: accent.value,
-      dailyPick: dailyPick.value,
-      theme: theme.value,
-    }),
-  )
+  function saveSettings(): void {
+    settingsSaved.value = true
+    writeKey(SETTINGS_KEY, { accent: accent.value, dailyPick: dailyPick.value, theme: theme.value })
+  }
+  watch([accent, dailyPick, theme], saveSettings)
 
   return {
     plans,
@@ -272,5 +295,7 @@ export const usePlannerStore = defineStore('planner', () => {
     setAccent,
     changeDailyPick,
     setTheme,
+    savedSettings,
+    importData,
   }
 })

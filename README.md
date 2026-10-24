@@ -29,6 +29,10 @@
   black-on-white sheet.
 - **Settings** sets the theme (System, Light or Dark), the accent colour and the exercises-per-day
   target (1–8).
+- **Export and import.** Settings → **Export** downloads your plans, ticks, accent and daily pick
+  as a JSON file; **Import…** merges such a file in. An import only adds: weeks you already have
+  keep their plan, and no tick is ever cleared. Data lives in one browser, so export is also the
+  backup.
 
 ## 2. Getting started
 

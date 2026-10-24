@@ -60,4 +60,5 @@ sets `persist-credentials: false`.
 
 All data lives in each browser's `localStorage`, keyed by origin. Moving the app to a new host or
 port starts every browser with empty data. Clearing site data erases the log, and no server-side
-copy exists. Sync is out of scope for now.
+copy exists. Settings → Export saves a JSON copy, and Import… merges one back on any origin
+(`architecture.md` §4), which is how data moves between hosts and how it is backed up.

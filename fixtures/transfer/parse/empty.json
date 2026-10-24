@@ -1,0 +1,12 @@
+{
+  "description": "Only format and version: empty plans and logs, and no settings.",
+  "input": { "format": "exercise-planner-export", "version": 1 },
+  "expected": {
+    "ok": true,
+    "data": {
+      "exercise": { "plans": {}, "log": {} },
+      "diet": { "plans": {}, "log": {} },
+      "settings": null
+    }
+  }
+}

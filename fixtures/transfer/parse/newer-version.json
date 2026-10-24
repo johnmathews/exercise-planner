@@ -1,0 +1,9 @@
+{
+  "description": "A file from a newer version of the format is rejected rather than half-read.",
+  "input": {
+    "format": "exercise-planner-export",
+    "version": 2,
+    "exercise": { "plans": {}, "log": {} }
+  },
+  "expected": { "ok": false, "error": "version" }
+}
