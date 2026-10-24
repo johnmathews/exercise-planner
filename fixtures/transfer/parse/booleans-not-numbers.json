@@ -1,0 +1,35 @@
+{
+  "description": "true and false are not numbers, and 1 is not a boolean: numeric fields fall back, perSide is dropped, and only a literal true ticks a day.",
+  "input": {
+    "format": "exercise-planner-export",
+    "version": 1,
+    "exercise": {
+      "plans": {
+        "2026-10-19": [
+          {
+            "id": "a",
+            "name": "A",
+            "sets": true,
+            "reps": true,
+            "perSide": 1,
+            "weight": true,
+            "target": true
+          }
+        ]
+      },
+      "log": { "2026-10-19": { "a": [1, true, "x", null, 0, false, true] } }
+    },
+    "settings": { "accent": "#30d158", "dailyPick": false }
+  },
+  "expected": {
+    "ok": true,
+    "data": {
+      "exercise": {
+        "plans": { "2026-10-19": [{ "id": "a", "name": "A", "reps": 0, "target": 3 }] },
+        "log": { "2026-10-19": { "a": [false, true, false, false, false, false, true] } }
+      },
+      "diet": { "plans": {}, "log": {} },
+      "settings": { "accent": "#30d158", "dailyPick": 3 }
+    }
+  }
+}
