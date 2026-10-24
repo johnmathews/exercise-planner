@@ -5,12 +5,12 @@ import { useDietStore } from '@/stores/diet'
 import { useSessionStore } from '@/stores/session'
 import { useSyncStore } from '@/stores/sync'
 import { describeProblem } from '@/lib/problems'
+import { useImportSummary } from '@/composables/importSummary'
 import { ACCENTS, MAX_DAILY_PICK, MIN_DAILY_PICK } from '@/lib/storage'
 import { THEMES, type Theme } from '@/lib/theme'
 import {
   buildExport,
   downloadExport,
-  mergeSummary,
   parseExport,
   type ExportData,
   type ParseError,
@@ -48,6 +48,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const pending = ref<ExportData | null>(null)
 const notice = ref<{ tone: 'error' | 'done'; text: string } | null>(null)
 const signOutProblem = ref<string | null>(null)
+const summary = useImportSummary()
 
 // Each opening starts clean, rather than showing the last import's or sign-out's outcome.
 watch(open, () => {
@@ -55,10 +56,6 @@ watch(open, () => {
   notice.value = null
   signOutProblem.value = null
 })
-
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? '' : 's'}`
-}
 
 function exportData(): void {
   downloadExport(
@@ -68,26 +65,6 @@ function exportData(): void {
       settings: { accent: store.accent, dailyPick: store.dailyPick },
     }),
   )
-}
-
-/** What importing `data` would add to the current state. */
-function additions(data: ExportData): { plans: number; ticks: number; settings: boolean } {
-  const ex = mergeSummary({ plans: store.plans, log: store.log }, data.exercise)
-  const di = mergeSummary({ plans: diet.plans, log: diet.log }, data.diet)
-  // Exercise and food plans count separately: a week can gain either or both.
-  return {
-    plans: ex.weeks + di.weeks,
-    ticks: ex.ticks + di.ticks,
-    settings: data.settings !== null && store.savedSettings() === null,
-  }
-}
-
-// Called from the template rather than stored with the file, so it re-renders and stays true if
-// another tab or a settings click changes the state first.
-function summaryOf(data: ExportData): string {
-  const { plans, ticks, settings } = additions(data)
-  const extra = settings ? ', plus the accent and exercises per day' : ''
-  return `Adds ${plural(plans, 'weekly plan')} and ${plural(ticks, 'tick')}${extra}. Existing plans and ticks stay as they are.`
 }
 
 async function onFile(ev: Event): Promise<void> {
@@ -110,8 +87,7 @@ async function onFile(ev: Event): Promise<void> {
     notice.value = { tone: 'error', text: IMPORT_ERRORS[result.error] }
     return
   }
-  const { plans, ticks, settings } = additions(result.data)
-  if (!plans && !ticks && !settings) {
+  if (!summary.addsAnything(result.data)) {
     notice.value = { tone: 'done', text: 'Nothing new: everything in that file is already here.' }
     return
   }
@@ -126,12 +102,25 @@ async function signOut(): Promise<void> {
   signOutProblem.value = problem ? describeProblem(problem) : null
 }
 
-function confirmImport(data: ExportData): void {
-  const { exercise, diet: food, settings } = data
-  store.importData(exercise, settings)
-  diet.importData(food)
-  pending.value = null
-  notice.value = { tone: 'done', text: 'Imported.' }
+const IMPORT_FAILED: Record<'offline' | 'auth' | 'error', string> = {
+  offline: 'Can’t reach the server, so nothing was imported. Try again when you’re online.',
+  auth: 'Your session has ended. Sign in again, then import the file.',
+  error: 'The server refused the import, so nothing changed.',
+}
+const importing = ref(false)
+
+/** Merge the file on the server (one request, never deleting), then show the result. */
+async function confirmImport(data: ExportData): Promise<void> {
+  if (importing.value) return
+  importing.value = true
+  const outcome = await sync.importFile(data)
+  importing.value = false
+  if (outcome.ok) {
+    pending.value = null
+    notice.value = { tone: 'done', text: 'Imported.' }
+  } else {
+    notice.value = { tone: 'error', text: IMPORT_FAILED[outcome.code] }
+  }
 }
 
 function onPointerDown(ev: PointerEvent): void {
@@ -255,9 +244,14 @@ onBeforeUnmount(() => {
         />
       </div>
       <div v-if="pending" class="flex flex-col gap-2" role="group" aria-label="Confirm import">
-        <p class="text-sm text-fg" data-testid="import-summary">{{ summaryOf(pending) }}</p>
+        <p class="text-sm text-fg" data-testid="import-summary">{{ summary.describe(pending) }}</p>
         <div class="flex gap-2">
-          <button type="button" class="btn flex-1 justify-center" @click="confirmImport(pending)">
+          <button
+            type="button"
+            class="btn flex-1 justify-center"
+            :aria-busy="importing"
+            @click="confirmImport(pending)"
+          >
             Import
           </button>
           <button type="button" class="btn flex-1 justify-center" @click="pending = null">

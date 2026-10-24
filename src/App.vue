@@ -9,6 +9,7 @@ import DietSection from '@/components/DietSection.vue'
 import LoginForm from '@/components/LoginForm.vue'
 import PasswordForm from '@/components/PasswordForm.vue'
 import SyncStatus from '@/components/SyncStatus.vue'
+import ImportPrompt from '@/components/ImportPrompt.vue'
 import { isDark } from '@/lib/theme'
 import { useSessionStore } from '@/stores/session'
 import { useSyncStore } from '@/stores/sync'
@@ -102,6 +103,7 @@ onBeforeUnmount(() => {
     <AppNavbar />
     <main class="mx-auto max-w-6xl px-4 pb-16 sm:px-6 lg:px-8 print:max-w-none print:p-0">
       <SyncStatus />
+      <ImportPrompt v-if="session.user" :key="session.user" :user="session.user" />
       <template v-if="sync.loaded">
         <WeekHeader />
         <ExerciseGrid />

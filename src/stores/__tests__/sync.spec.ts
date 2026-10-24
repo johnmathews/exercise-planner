@@ -534,6 +534,93 @@ describe('sync, after review', () => {
   })
 })
 
+describe('importFile', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+    localStorage.clear()
+    setActivePinia(createPinia())
+    api = new FakeApi()
+    api.addUser(USER)
+    api.signedIn = USER
+    vi.stubGlobal('fetch', api.fetch)
+    lost = vi.fn<() => void>()
+  })
+
+  afterEach(() => {
+    useSyncStore().stop()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  const data = {
+    exercise: {
+      plans: { [WEEK]: [SQUATS], '2026-10-12': [SQUATS] },
+      log: { [WEEK]: { sq: [true, true, false, false, false, false, false] } },
+    },
+    diet: { plans: {}, log: {} },
+    settings: { accent: '#0a84ff', dailyPick: 5 },
+  }
+
+  it('sends pending writes first, imports on the server, then shows the merged state', async () => {
+    const { sync, planner } = await start(emptyState())
+    api.offline = true
+    planner.toggle('pu', 3) // queued: this week gets its own plan (the defaults) first
+    await settle()
+    api.offline = false
+    const outcome = await sync.importFile(data)
+    expect(outcome).toEqual({ ok: true, added: { weeks: 1, ticks: 2, settings: true } })
+    const order = api.paths().filter((p) => !p.startsWith('GET'))
+    expect(order.at(-1)).toBe('POST /import')
+    expect(api.calls.find((c) => c.path === '/import')!.expectedUser).toBe(USER)
+    // This week kept its own plan; last week came from the import; settings applied.
+    expect(planner.exercises.map((e) => e.id)).toContain('pu')
+    expect(planner.plans['2026-10-12']).toEqual([SQUATS])
+    expect(planner.isDone('pu', 3) && planner.isDone('sq', 0)).toBe(true)
+    expect(planner.accent).toBe('#0a84ff')
+  })
+
+  it('reports being offline and changes nothing', async () => {
+    const { sync, planner } = await start(emptyState())
+    api.offline = true
+    expect(await sync.importFile(data)).toEqual({ ok: false, code: 'offline' })
+    expect(planner.plans).toEqual({})
+  })
+
+  it('reports a refusal, and hands control back on a 401', async () => {
+    const { sync } = await start(emptyState())
+    api.failNext('POST', '/import', 400, { error: 'format' })
+    expect(await sync.importFile(data)).toEqual({ ok: false, code: 'error' })
+    api.signedIn = null
+    expect(await sync.importFile(data)).toEqual({ ok: false, code: 'auth' })
+    expect(lost).toHaveBeenCalled()
+  })
+
+  it('gives up if the session stops while it waits', async () => {
+    const { sync, planner } = await start(emptyState())
+    let release = api.hold()
+    planner.toggle('pu', 3) // a queued write the import must wait for
+    await nextTick()
+    const waiting = sync.importFile(data)
+    sync.stop()
+    release()
+    expect(await waiting).toEqual({ ok: false, code: 'error' })
+    sync.start(USER, lost)
+    await flushPromises()
+    release = api.hold()
+    const posting = sync.importFile(data)
+    await flushPromises() // the import is now in flight
+    sync.stop()
+    release()
+    expect(await posting).toEqual({ ok: false, code: 'error' })
+  })
+
+  it('refuses when nobody is signed in', async () => {
+    expect(await useSyncStore().importFile(data)).toEqual({ ok: false, code: 'error' })
+    expect(api.calls).toEqual([])
+  })
+})
+
 describe('diff', () => {
   const settings = { accent: '#30d158', dailyPick: 3 }
   const empty = () => ({

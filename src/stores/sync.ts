@@ -18,6 +18,7 @@ import {
   type PortableSettings,
 } from '@/lib/storage'
 import type { Plans } from '@/lib/plans'
+import { EXPORT_FORMAT, EXPORT_VERSION, type ExportData } from '@/lib/transfer'
 import { useDietStore } from '@/stores/diet'
 import { usePlannerStore } from '@/stores/planner'
 
@@ -56,6 +57,10 @@ export type SyncState = {
   settings: PortableSettings | null
 }
 type Snapshot = { exercise: Tracked; diet: Tracked; settings: PortableSettings }
+/** What `POST /api/import` added. */
+export type ImportAdded = { weeks: number; ticks: number; settings: boolean }
+export type ImportOutcome =
+  { ok: true; added: ImportAdded } | { ok: false; code: 'offline' | 'auth' | 'error' }
 
 export const CONFLICT_NOTICE =
   'A plan was changed on another device, so this device now shows that version.'
@@ -269,7 +274,7 @@ export const useSyncStore = defineStore('sync', () => {
   }
 
   /** A request on behalf of the signed-in user, which the API refuses for anyone else. */
-  function call<T>(method: 'GET' | 'PUT', path: string, body?: unknown) {
+  function call<T>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown) {
     return request<T>(method, path, body, { 'X-Expected-User': user.value ?? '' })
   }
 
@@ -392,6 +397,40 @@ export const useSyncStore = defineStore('sync', () => {
     return refreshing
   }
 
+  /**
+   * Merge `data` into the account on the server (`POST /api/import`), then show the result. Local
+   * writes go first, so the server merges against everything this device has; the server's merge
+   * never deletes (docs/architecture.md §4). One request, however much the data holds.
+   */
+  async function importFile(data: ExportData): Promise<ImportOutcome> {
+    if (!user.value) return { ok: false, code: 'error' }
+    const gen = generation
+    capture()
+    await flush()
+    if (gen !== generation) return { ok: false, code: 'error' }
+    const file = {
+      format: EXPORT_FORMAT,
+      version: EXPORT_VERSION,
+      exportedAt: new Date().toISOString(),
+      exercise: data.exercise,
+      diet: data.diet,
+      ...(data.settings ? { settings: data.settings } : {}),
+    }
+    const res = await call<ImportAdded>('POST', '/import', file)
+    if (gen !== generation) return { ok: false, code: 'error' }
+    if (!res.ok) {
+      if (res.error.kind === 'offline' || res.error.kind === 'server')
+        return { ok: false, code: 'offline' }
+      if (res.error.kind === 'auth') {
+        authLost?.()
+        return { ok: false, code: 'auth' }
+      }
+      return { ok: false, code: 'error' }
+    }
+    await refresh()
+    return { ok: true, added: res.data }
+  }
+
   /** Begin syncing for `name`: show the cache at once, then send and read in the background. */
   function start(name: string, onAuthLost: () => void): void {
     stop()
@@ -466,6 +505,7 @@ export const useSyncStore = defineStore('sync', () => {
     forget,
     flush,
     refresh,
+    importFile,
     onStorage,
     dismissNotice,
   }

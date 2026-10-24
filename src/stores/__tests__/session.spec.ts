@@ -171,6 +171,16 @@ describe('session', () => {
     expect(useSyncStore().user).toBeNull()
   })
 
+  it('ignores a session event that changes nothing', async () => {
+    api = signedIn()
+    const session = useSessionStore()
+    await session.init()
+    const reads = api.paths('GET /auth/me').length
+    await session.onStorage(SESSION_KEY)
+    expect(session.status).toBe('signed-in')
+    expect(api.paths('GET /auth/me')).toHaveLength(reads)
+  })
+
   it('follows another tab signing in as someone else', async () => {
     api = signedIn()
     api.addUser('bob')

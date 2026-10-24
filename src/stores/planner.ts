@@ -32,7 +32,6 @@ import {
   type PortableSettings,
 } from '@/lib/storage'
 import * as tracker from '@/lib/tracker'
-import { mergeSettings, mergeTracked } from '@/lib/transfer'
 import type { Theme } from '@/lib/theme'
 import { copyPlan, planSource, type Plans } from '@/lib/plans'
 
@@ -236,19 +235,6 @@ export const usePlannerStore = defineStore('planner', () => {
     return settingsSaved.value ? { accent: accent.value, dailyPick: dailyPick.value } : null
   }
 
-  /** Merges an export in without deleting anything (`mergeTracked`, `mergeSettings`). */
-  function importData(exercise: PlannerData, incoming: PortableSettings | null): void {
-    const merged = mergeTracked({ plans: plans.value, log: log.value }, exercise)
-    plans.value = merged.plans
-    log.value = merged.log
-    const next = mergeSettings(savedSettings(), incoming)
-    if (next && !settingsSaved.value) {
-      accent.value = next.accent
-      dailyPick.value = next.dailyPick
-      settingsSaved.value = true
-    }
-  }
-
   // Only the theme is written to the device's settings key, merged into what is there: it is
   // what public/theme-init.js reads before first paint, and the accent and daily pick saved by
   // the app before accounts existed stay untouched for the first-login import.
@@ -297,6 +283,5 @@ export const usePlannerStore = defineStore('planner', () => {
     changeDailyPick,
     setTheme,
     savedSettings,
-    importData,
   }
 })

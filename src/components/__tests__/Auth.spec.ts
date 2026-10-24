@@ -157,6 +157,23 @@ describe('invite and reset links', () => {
     expect(api.accounts.get('bob')!.password).toBe('a long new password')
   })
 
+  it('sends one redeem however often the button is pressed', async () => {
+    api = signedOut()
+    api.links.set('tok_9', { kind: 'invite', username: 'hal' })
+    history.replaceState(null, '', '/#/invite/tok_9')
+    mountApp()
+    await flushPromises()
+    await wrapper.get('#new-password').setValue('a long new password')
+    await wrapper.get('#confirm-password').setValue('a long new password')
+    const release = api.hold()
+    await wrapper.get('form').trigger('submit')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.get('button[type="submit"]').text()).toBe('Saving…')
+    release()
+    await flushPromises()
+    expect(api.paths('/invites/redeem')).toHaveLength(1)
+  })
+
   it('checks the two passwords match, and shows the server’s length rule', async () => {
     api = signedOut()
     api.links.set('tok_1', { kind: 'invite', username: 'bob' })
