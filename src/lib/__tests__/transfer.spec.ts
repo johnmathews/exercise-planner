@@ -1,5 +1,3 @@
-import { readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   EXPORT_FORMAT,
@@ -14,21 +12,7 @@ import {
 } from '@/lib/transfer'
 import type { Exercise, Log } from '@/lib/storage'
 import type { Plans } from '@/lib/plans'
-
-// The shared contract with the API's tests: every case lives in fixtures/transfer/ as JSON.
-// (jsdom gives import.meta.url an http: scheme, so resolve from the file's directory instead.)
-const FIXTURES = join(import.meta.dirname, '../../../fixtures/transfer')
-
-function readJson(path: string): unknown {
-  return JSON.parse(readFileSync(join(FIXTURES, path), 'utf8'))
-}
-
-function cases<T>(dir: string): [string, T][] {
-  return readdirSync(join(FIXTURES, dir))
-    .filter((f) => f.endsWith('.json'))
-    .sort()
-    .map((f) => [f, readJson(`${dir}/${f}`) as T])
-}
+import { fixtureCases, readFixture } from './fixtures'
 
 type Tracked = { plans: Plans<Exercise>; log: Log }
 type ParseCase = { input?: unknown; inputText?: string; expected: unknown }
@@ -42,10 +26,10 @@ type SettingsCase = { existing: unknown; incoming: unknown; expected: unknown }
 
 describe('parseExport fixtures', () => {
   it('finds the fixture files', () => {
-    expect(cases('parse').length).toBeGreaterThanOrEqual(8)
+    expect(fixtureCases('parse').length).toBeGreaterThanOrEqual(8)
   })
 
-  it.each(cases<ParseCase>('parse'))('%s', (_, c) => {
+  it.each(fixtureCases<ParseCase>('parse'))('%s', (_, c) => {
     const text = c.inputText ?? JSON.stringify(c.input)
     expect(parseExport(text)).toEqual(c.expected)
   })
@@ -53,17 +37,17 @@ describe('parseExport fixtures', () => {
 
 describe('mergeTracked fixtures', () => {
   it('finds the fixture files', () => {
-    expect(cases('merge').length).toBeGreaterThanOrEqual(5)
+    expect(fixtureCases('merge').length).toBeGreaterThanOrEqual(5)
   })
 
-  it.each(cases<MergeCase>('merge'))('%s', (_, c) => {
+  it.each(fixtureCases<MergeCase>('merge'))('%s', (_, c) => {
     expect(mergeTracked(c.existing, c.incoming)).toEqual(c.expected)
     expect(mergeSummary(c.existing, c.incoming)).toEqual(c.summary)
   })
 })
 
 describe('mergeSettings fixtures', () => {
-  const file = readJson('merge-settings.json') as { cases: SettingsCase[] }
+  const file = readFixture('merge-settings.json') as { cases: SettingsCase[] }
   it.each(file.cases.map((c) => [JSON.stringify(c.existing), c] as const))(
     'existing %s',
     (_, c) => {

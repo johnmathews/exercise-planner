@@ -1,0 +1,19 @@
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+
+// The shared contract with the API's tests: the cases live in fixtures/transfer/ as JSON.
+// (jsdom gives import.meta.url an http: scheme, so resolve from the file's directory instead.)
+const FIXTURES = join(import.meta.dirname, '../../../fixtures/transfer')
+
+/** A fixture file by its path under `fixtures/transfer/`. */
+export function readFixture<T = unknown>(path: string): T {
+  return JSON.parse(readFileSync(join(FIXTURES, path), 'utf8')) as T
+}
+
+/** Every `.json` file in a fixture directory, sorted, as `[filename, contents]`. */
+export function fixtureCases<T>(dir: string): [string, T][] {
+  return readdirSync(join(FIXTURES, dir))
+    .filter((f) => f.endsWith('.json'))
+    .sort()
+    .map((f) => [f, readFixture<T>(`${dir}/${f}`)])
+}

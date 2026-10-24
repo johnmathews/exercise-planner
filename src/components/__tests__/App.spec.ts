@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import App from '@/App.vue'
 import { usePlannerStore } from '@/stores/planner'
+import { readFixture } from '@/lib/__tests__/fixtures'
 
 const NOW = new Date(2026, 9, 23, 18, 0)
 
@@ -500,6 +501,86 @@ describe('export and import', () => {
     await openSettings()
     await openSettings()
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
+})
+
+describe('export and import with the sample data', () => {
+  // Five weeks of edited plans, ticks, diet and non-default settings (fixtures/transfer/sample/).
+  const storage = readFixture<Record<string, unknown>>('sample/storage.json')
+  const sample = readFixture<Record<string, unknown>>('sample/export.json')
+
+  function seed(): void {
+    for (const [key, value] of Object.entries(storage)) {
+      localStorage.setItem(key, JSON.stringify(value))
+    }
+  }
+
+  function stored(): Record<string, unknown> {
+    return Object.fromEntries(Object.keys(storage).map((k) => [k, JSON.parse(localStorage[k])]))
+  }
+
+  async function openSettings(): Promise<void> {
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().endsWith('Settings'))!
+      .trigger('click')
+  }
+
+  function button(name: string) {
+    return wrapper.findAll('button').find((b) => b.text() === name)!
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+    localStorage.clear()
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('exports the sample storage as the sample export file', async () => {
+    let blob: Blob | undefined
+    URL.createObjectURL = vi.fn<(b: Blob) => string>((b) => {
+      blob = b
+      return 'blob:sample'
+    })
+    URL.revokeObjectURL = vi.fn<(url: string) => void>()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    seed()
+    mountApp()
+    // The seeded week shows its edited plan, so the app really loaded the sample.
+    expect(
+      ex()
+        .findAll('[data-testid="item-name"]')
+        .map((n) => n.text()),
+    ).toEqual(['Push-ups', 'Pull-ups', 'Squats', 'Kettlebell halos', 'Plank'])
+    await openSettings()
+    await button('Export').trigger('click')
+    expect(JSON.parse(await blob!.text())).toEqual({ ...sample, exportedAt: NOW.toISOString() })
+  })
+
+  it('imports the sample export into an empty browser and gets the same storage back', async () => {
+    mountApp()
+    await openSettings()
+    const input = wrapper.get('[data-testid="import-file"]')
+    const file = new File([JSON.stringify(sample)], 'sample.json', { type: 'application/json' })
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="import-summary"]').text()).toBe(
+      'Adds 6 weekly plans and 102 ticks, plus the accent and exercises per day. Existing plans and ticks stay as they are.',
+    )
+    await button('Import').trigger('click')
+    await flushPromises()
+    // The theme is per device, so this browser keeps its own default rather than the sample's.
+    const settings = storage['exercise-planner-settings-v1'] as object
+    expect(stored()).toEqual({
+      ...storage,
+      'exercise-planner-settings-v1': { ...settings, theme: 'system' },
+    })
   })
 })
 
