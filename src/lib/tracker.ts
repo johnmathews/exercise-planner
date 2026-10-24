@@ -37,8 +37,12 @@ export function goalsMet(items: Tracked[], week: WeekLog): number {
 
 /** Flip one day in place, creating the week and the item's flags on first use. */
 export function toggleDay(log: Log, weekKey: string, id: string, day: number): void {
-  const week = (log[weekKey] ??= {})
-  const flags = (week[id] ??= Array<boolean>(7).fill(false))
+  // Read each level back through `log` rather than keeping the `??=` result: on a reactive log
+  // that result is the raw object, and a change made to it would notify no watcher.
+  log[weekKey] ??= {}
+  const week = log[weekKey]!
+  week[id] ??= Array<boolean>(7).fill(false)
+  const flags = week[id]!
   flags[day] = !flags[day]
 }
 

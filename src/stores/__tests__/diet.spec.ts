@@ -3,7 +3,7 @@ import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { useDietStore } from '@/stores/diet'
 import { usePlannerStore } from '@/stores/planner'
-import { DATA_KEY, DIET_KEY } from '@/lib/storage'
+import { DIET_KEY } from '@/lib/storage'
 
 // Friday 23 Oct 2026: the visible week is Mon 19 – Sun 25.
 const NOW = new Date(2026, 9, 23, 18, 0)
@@ -37,7 +37,7 @@ describe('diet store', () => {
     expect(d.goalsMet).toBe(0)
   })
 
-  it('toggles foods in the planner’s visible week and persists only the diet key', async () => {
+  it('toggles foods in the planner’s visible week', () => {
     const d = useDietStore()
     d.toggle('fish', 0)
     d.toggle('fish', 3)
@@ -47,11 +47,7 @@ describe('diet store', () => {
     expect(d.dayCounts).toEqual([1, 0, 0, 2, 0, 0, 0])
     expect(d.grandTotal).toBe(3)
     expect(d.goalsMet).toBe(1)
-    await nextTick()
-    expect(stored(DIET_KEY)).toMatchObject({
-      log: { '2026-10-19': { fish: [true, false, false, true, false, false, false] } },
-    })
-    expect(stored(DATA_KEY)).toBeNull()
+    expect(d.log['2026-10-19']!.fish).toEqual([true, false, false, true, false, false, false])
   })
 
   it('follows week navigation from the planner store', () => {
@@ -87,19 +83,16 @@ describe('diet store', () => {
     expect(d.log['2026-10-19']?.nuts?.[0]).toBe(true)
   })
 
-  it('adopts another tab’s diet write and ignores unrelated keys', () => {
+  it('adopts food data wholesale or a week at a time, and clears', () => {
     const d = useDietStore()
-    localStorage.setItem(
-      DIET_KEY,
-      JSON.stringify({ plans: { '2026-10-19': [{ id: 'z', name: 'Z', target: 1 }] } }),
-    )
-    d.syncFromStorage(DATA_KEY)
-    expect(d.foods).toHaveLength(4)
-    d.syncFromStorage(DIET_KEY)
+    d.adopt({ plans: { '2026-10-19': [{ id: 'z', name: 'Z', target: 1 }] }, log: {} })
     expect(d.foods.map((f) => f.name)).toEqual(['Z'])
-    localStorage.clear()
-    d.syncFromStorage(null)
+    d.adoptWeek('2026-10-19', [{ id: 'y', name: 'Y', target: 2 }])
+    expect(d.foods.map((f) => f.name)).toEqual(['Y'])
+    d.toggle('y', 0)
+    d.clear()
     expect(d.foods).toHaveLength(4)
+    expect(d.grandTotal).toBe(0)
   })
 
   it('carries food plans forward and copies them to the next week', () => {
@@ -117,15 +110,16 @@ describe('diet store', () => {
     expect(d.foods.map((f) => f.id)).toContain('fish')
   })
 
-  it('migrates the legacy diet key', () => {
-    localStorage.setItem(
-      'exercise-planner-diet-v1',
-      JSON.stringify({ foods: [{ id: 'z', name: 'Z', target: 2 }], log: {} }),
-    )
+  it('never reads or writes the diet keys from before accounts', async () => {
+    const legacy = JSON.stringify({ foods: [{ id: 'z', name: 'Z', target: 2 }], log: {} })
+    localStorage.setItem('exercise-planner-diet-v1', legacy)
     setActivePinia(createPinia())
     const d = useDietStore()
-    expect(d.foods.map((f) => f.name)).toEqual(['Z'])
-    expect(stored(DIET_KEY)).toMatchObject({ plans: { '2026-10-19': [{ id: 'z' }] } })
+    expect(d.foods).toHaveLength(4)
+    d.toggle('veg', 0)
+    await nextTick()
+    expect(localStorage.getItem('exercise-planner-diet-v1')).toBe(legacy)
+    expect(stored(DIET_KEY)).toBeNull()
   })
 })
 
@@ -141,19 +135,14 @@ describe('diet importData', () => {
     vi.useRealTimers()
   })
 
-  it('merges food plans and ticks under the diet key only', async () => {
+  it('merges food plans and ticks into the diet store only', () => {
     const d = useDietStore()
     d.importData({
       plans: { '2026-10-19': [{ id: 'eggs', name: 'Eggs', target: 2 }] },
       log: { '2026-10-19': { eggs: [true, false, false, false, false, false, false] } },
     })
-    await nextTick()
     expect(d.foods.map((f) => f.name)).toEqual(['Eggs'])
     expect(d.isEaten('eggs', 0)).toBe(true)
-    expect(stored(DIET_KEY)).toEqual({
-      plans: { '2026-10-19': [{ id: 'eggs', name: 'Eggs', target: 2 }] },
-      log: { '2026-10-19': { eggs: [true, false, false, false, false, false, false] } },
-    })
-    expect(stored(DATA_KEY)).toBeNull()
+    expect(usePlannerStore().log).toEqual({})
   })
 })

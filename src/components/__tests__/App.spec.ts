@@ -3,13 +3,21 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import App from '@/App.vue'
 import { usePlannerStore } from '@/stores/planner'
+import { CACHE_PREFIX, type SyncState } from '@/stores/sync'
 import { readFixture } from '@/lib/__tests__/fixtures'
+import type { FakeApi } from '@/lib/__tests__/fakeApi'
+import { USER, cached, emptyState, signedIn } from '@/lib/__tests__/signedIn'
 
 const NOW = new Date(2026, 9, 23, 18, 0)
 
 let wrapper: VueWrapper
+let api: FakeApi
 
-function mountApp(): VueWrapper {
+afterEach(() => vi.unstubAllGlobals())
+
+/** Mount the app signed in as alice, with `cache` as her data on this device. */
+function mountApp(cache?: SyncState): VueWrapper {
+  api = signedIn(cache)
   const pinia = createPinia()
   setActivePinia(pinia)
   wrapper = mount(App, { global: { plugins: [pinia] }, attachTo: document.body })
@@ -168,16 +176,14 @@ describe('App', () => {
     expect(store.days.findIndex((d) => d.isToday)).toBe(5)
   })
 
-  it('adopts changes another tab writes to storage', async () => {
+  it('adopts changes another tab writes to the cache', async () => {
     mountApp()
-    const other = {
-      plans: { '2026-10-19': [{ id: 'a', name: 'From other tab', reps: 5, target: 2 }] },
-      log: { '2026-10-19': { a: [true, false, false, false, false, false, false] } },
+    const other = emptyState()
+    other.exercise.plans = {
+      '2026-10-19': [{ id: 'a', name: 'From other tab', reps: 5, target: 2 }],
     }
-    localStorage.setItem('exercise-planner-v2', JSON.stringify(other))
-    window.dispatchEvent(
-      new StorageEvent('storage', { key: 'exercise-planner-v2', storageArea: localStorage }),
-    )
+    other.exercise.log = { '2026-10-19': { a: [true, false, false, false, false, false, false] } }
+    otherTabWrites(other)
     await wrapper.vm.$nextTick()
     expect(
       ex()
@@ -187,6 +193,13 @@ describe('App', () => {
     expect(wrapper.get('[data-testid="grand-total"]').text()).toBe('1')
   })
 })
+
+/** Another tab saved `state` to alice's cache. */
+function otherTabWrites(state: SyncState): void {
+  const key = CACHE_PREFIX + USER
+  localStorage.setItem(key, JSON.stringify(state))
+  window.dispatchEvent(new StorageEvent('storage', { key, storageArea: localStorage }))
+}
 
 describe('AddExerciseForm', () => {
   beforeEach(() => {
@@ -473,12 +486,14 @@ describe('export and import', () => {
     ],
   ])('rejects %s with an inline error and changes nothing', async (_, file, message) => {
     mountApp()
+    await flushPromises()
+    const before = { ...localStorage }
     await openSettings()
     await choose(file)
     const alert = wrapper.get('[role="alert"]')
     expect(alert.text()).toBe(message)
     expect(alert.attributes('data-tone')).toBe('error')
-    expect(localStorage.length).toBe(0)
+    expect({ ...localStorage }).toEqual(before)
   })
 
   it('reports a file that cannot be read', async () => {
@@ -510,14 +525,21 @@ describe('export and import with the sample data', () => {
   const storage = readFixture<Record<string, unknown>>('sample/storage.json')
   const sample = readFixture<Record<string, unknown>>('sample/export.json')
 
-  function seed(): void {
-    for (const [key, value] of Object.entries(storage)) {
-      localStorage.setItem(key, JSON.stringify(value))
-    }
+  type Tracked = { plans: object; log: object }
+  const exercise = storage['exercise-planner-v2'] as Tracked
+  const diet = storage['exercise-planner-diet-v2'] as Tracked
+  const { accent, dailyPick } = storage['exercise-planner-settings-v1'] as {
+    accent: string
+    dailyPick: number
   }
 
-  function stored(): Record<string, unknown> {
-    return Object.fromEntries(Object.keys(storage).map((k) => [k, JSON.parse(localStorage[k])]))
+  /** The sample as alice's cache: the same data, as the sync store keeps it. */
+  function sampleCache(): SyncState {
+    return {
+      exercise: { ...exercise, revs: {} },
+      diet: { ...diet, revs: {} },
+      settings: { accent, dailyPick },
+    } as SyncState
   }
 
   async function openSettings(): Promise<void> {
@@ -550,8 +572,11 @@ describe('export and import with the sample data', () => {
     })
     URL.revokeObjectURL = vi.fn<(url: string) => void>()
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-    seed()
-    mountApp()
+    api = signedIn(sampleCache())
+    api.stall('GET', '/state') // show the cache, as the browser does before the server answers
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    wrapper = mount(App, { global: { plugins: [pinia] }, attachTo: document.body })
     // The seeded week shows its edited plan, so the app really loaded the sample.
     expect(
       ex()
@@ -563,8 +588,9 @@ describe('export and import with the sample data', () => {
     expect(JSON.parse(await blob!.text())).toEqual({ ...sample, exportedAt: NOW.toISOString() })
   })
 
-  it('imports the sample export into an empty browser and gets the same storage back', async () => {
+  it('imports the sample export into an empty account and syncs all of it', async () => {
     mountApp()
+    await flushPromises()
     await openSettings()
     const input = wrapper.get('[data-testid="import-file"]')
     const file = new File([JSON.stringify(sample)], 'sample.json', { type: 'application/json' })
@@ -576,12 +602,18 @@ describe('export and import with the sample data', () => {
     )
     await button('Import').trigger('click')
     await flushPromises()
-    // The theme is per device, so this browser keeps its own default rather than the sample's.
-    const settings = storage['exercise-planner-settings-v1'] as object
-    expect(stored()).toEqual({
-      ...storage,
-      'exercise-planner-settings-v1': { ...settings, theme: 'system' },
-    })
+    const { revs: _e, ...cachedExercise } = cached().exercise
+    const { revs: _d, ...cachedDiet } = cached().diet
+    expect(cachedExercise).toEqual(exercise)
+    expect(cachedDiet).toEqual(diet)
+    expect(cached().settings).toEqual({ accent, dailyPick })
+    // Every plan and tick reached the server too.
+    const server = api.state(USER) as SyncState
+    expect({ plans: server.exercise.plans, log: server.exercise.log }).toEqual(exercise)
+    expect({ plans: server.diet.plans, log: server.diet.log }).toMatchObject(diet)
+    expect(server.settings).toEqual({ accent, dailyPick })
+    // The theme is per device, so it never left this browser.
+    expect(localStorage.getItem('exercise-planner-settings-v1')).toBeNull()
   })
 })
 
@@ -734,16 +766,9 @@ describe('exercise weight', () => {
     await mountConfig()
     await wrapper.get('button[aria-label="Edit Squats"]').trigger('click')
     const store = usePlannerStore()
-    localStorage.setItem(
-      'exercise-planner-v2',
-      JSON.stringify({
-        plans: { '2026-10-19': store.exercises.filter((e) => e.id !== 'sq') },
-        log: {},
-      }),
-    )
-    window.dispatchEvent(
-      new StorageEvent('storage', { key: 'exercise-planner-v2', storageArea: localStorage }),
-    )
+    const other = emptyState()
+    other.exercise.plans = { '2026-10-19': store.exercises.filter((e) => e.id !== 'sq') }
+    otherTabWrites(other)
     await wrapper.vm.$nextTick()
     expect(wrapper.find('dialog').exists()).toBe(false)
   })
@@ -752,16 +777,9 @@ describe('exercise weight', () => {
     await mountConfig()
     await wrapper.get('button[aria-label="Edit Squats"]').trigger('click')
     const store = usePlannerStore()
-    localStorage.setItem(
-      'exercise-planner-v2',
-      JSON.stringify({
-        plans: { '2026-10-19': store.exercises.filter((e) => e.id !== 'pu') },
-        log: {},
-      }),
-    )
-    window.dispatchEvent(
-      new StorageEvent('storage', { key: 'exercise-planner-v2', storageArea: localStorage }),
-    )
+    const other = emptyState()
+    other.exercise.plans = { '2026-10-19': store.exercises.filter((e) => e.id !== 'pu') }
+    otherTabWrites(other)
     await wrapper.vm.$nextTick()
     expect(wrapper.find('dialog').exists()).toBe(true)
   })

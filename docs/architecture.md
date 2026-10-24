@@ -2,15 +2,17 @@
 
 > Purpose
 >
-> How the planner is put together: the component tree, the Pinia stores, what goes into
-> `localStorage`, and the decisions that depart from the design prototype.
+> How the planner is put together: the component tree, the Pinia stores, how data syncs with the
+> API and what stays in `localStorage`, and the decisions that depart from the design prototype.
 
 ## 1. Overview
 
-A Vue 3 SPA. The API service in `api/` ([api.md](api.md)) holds accounts and synced data, but the
-client does not call it yet. Until then the app runs without a backend. Two Pinia stores hold all state and write it back to
-`localStorage`: `planner` (exercise plans, the log, the visible week, settings, the mode) and `diet`
-(food plans and their log), which takes its week from `planner`. Both track the same thing, a tick
+A Vue 3 SPA with accounts. The API service in `api/` ([api.md](api.md)) holds each user's data, and
+the app syncs with it through the same origin (§7). Two Pinia stores hold what the app shows:
+`planner` (exercise plans, the log, the visible week, settings, the mode) and `diet` (food plans and
+their log), which takes its week from `planner`. Two more run the account: `session` (who is signed
+in) and `sync` (the per-user cache, the outbox of unsent writes, and reads). Both data stores track
+the same thing, a tick
 per day against a weekly goal, through the pure helpers in `src/lib/tracker.ts`. `src/lib/plans.ts`
 decides which week's plan a week shows; `src/lib/dates.ts` holds the week maths (Monday of a week,
 `YYYY-MM-DD` keys and back, labels, `DAY_NAMES`); `src/lib/theme.ts` holds the theme names and
@@ -23,11 +25,15 @@ state and input cleaning through `useExerciseForm` (`src/composables/exerciseFor
 `PerSideToggle` segmented control.
 
 ```
-App.vue                 navbar + main column, --accent variable, .dark class, clock refresh,
-│                       cross-tab sync
+App.vue                 picks the screen (link, planner or sign-in), --accent variable, .dark class,
+│                       clock refresh, sync triggers (focus, visibility, online, minute tick, storage)
+├── PasswordForm.vue    an invite or reset link (#/invite/<t>, #/reset/<t>): choose a password
+├── LoginForm.vue       username and password; explains refusals; notes an ended session
+│   (both inside AuthCard.vue: a centred card with the app name)
 ├── AppNavbar.vue       sticky top bar: app name, ‹ This Week ›, Edit plan switch, Settings, Print…
-│   └── SettingsPopover.vue   theme (System/Light/Dark), accent swatches, exercises-per-day stepper,
-│                             Export and Import… (see §4)
+│   └── SettingsPopover.vue   who is signed in and Sign out, theme (System/Light/Dark), accent
+│                             swatches, exercises-per-day stepper, Export and Import… (see §4)
+├── SyncStatus.vue      loading, offline and conflict messages above the planner
 ├── WeekHeader.vue      H1 week label, daily-pick hint, grand total; in config mode "Copy plan to
 │                       next week" and a note when the plan is carried over
 ├── ExerciseGrid.vue    wires planner to a TrackerGrid: sets/reps/weight chips, edit, "Picked / N"
@@ -63,15 +69,18 @@ foods (with goals). Ticks live in a separate **log**, keyed by week and item id.
 
 `usePlannerStore` is a setup store.
 
-| State                 | Persisted                      | Notes                                                           |
-| --------------------- | ------------------------------ | --------------------------------------------------------------- |
-| `plans`               | `exercise-planner-v2`          | week → `{ id, name, sets?, reps, perSide?, weight?, target }[]` |
-| `log`                 | `exercise-planner-v2`          | week Monday `YYYY-MM-DD` → exercise id → seven booleans         |
-| `accent`, `dailyPick` | `exercise-planner-settings-v1` | defaults `#30d158`, `3`                                         |
-| `theme`               | `exercise-planner-settings-v1` | `system` (default), `light` or `dark`                           |
-| `configMode`          | no                             | `false` (normal mode) on every load                             |
-| `weekOffset`          | no                             | `0` is the current week                                         |
-| `now`                 | no                             | a ref so "today" can move; see §5                               |
+| State                 | Kept by                                     | Notes                                                           |
+| --------------------- | ------------------------------------------- | --------------------------------------------------------------- |
+| `plans`               | the sync store: server and per-user cache   | week → `{ id, name, sets?, reps, perSide?, weight?, target }[]` |
+| `log`                 | the sync store: server and per-user cache   | week Monday `YYYY-MM-DD` → exercise id → seven booleans         |
+| `accent`, `dailyPick` | the sync store: server and per-user cache   | defaults `#30d158`, `3`                                         |
+| `theme`               | `exercise-planner-settings-v1` (the device) | `system` (default), `light` or `dark`                           |
+| `configMode`          | no                                          | `false` (normal mode) on every load                             |
+| `weekOffset`          | no                                          | `0` is the current week                                         |
+| `now`                 | no                                          | a ref so "today" can move; see §5                               |
+
+The stores start empty (showing the defaults) and never write the user's data themselves. The sync
+store fills them with `adopt` and saves their changes (§7).
 
 **Derived:** `monday`, `weekKey`, `currentWeekKey`, `nextWeekKey`, `label`, `days` (name, date, key,
 `isToday`), `exercises` (the visible week's plan, see §2), `carriedFrom` (the source week, or null
@@ -83,29 +92,39 @@ exercise's history stays in `log` without inflating the numbers.
 `addExercise` (returns `false` for an empty name; new exercises get goal 3), `updateExercise`
 (replaces name, sets, reps, per-side and weight, keeping the id, goal and history; `false` for an
 empty name or an id not in the week), `removeExercise`, `copyToNextWeek`, `setConfigMode`,
-`prevWeek`, `nextWeek`, `thisWeek`, `refreshNow`, `syncFromStorage`, `setAccent`, `changeDailyPick`
-(clamps 1–8), `setTheme`, `importData` (merges an export into the plans, log and settings; see §4)
-and `savedSettings`. The module also exports `exerciseDetails`, which gives the chips under a name:
+`prevWeek`, `nextWeek`, `thisWeek`, `refreshNow`, `setAccent`, `changeDailyPick` (clamps 1–8),
+`setTheme`, `importData` (merges an export into the plans, log and settings; see §4),
+`savedSettings` (the accent and daily pick, or null while the user has none of their own), `adopt`
+(replace the data and settings wholesale), `adoptWeek` (replace one week's plan) and `clear` (forget
+the user on sign-out, keeping the theme). The module also exports `exerciseDetails`, which gives the chips under a name:
 "3 × 10 reps" (or "10 reps / set" without sets, "3 sets" without reps, "8 each side" in place of
 "10 reps" when per side), then "12 kg" when weighted, or "—" for none of these.
 
-`useDietStore` holds `plans` of foods (`{ id, name, target }`) and its own `log`, persisted together
-under `exercise-planner-diet-v2`. It reads `planner.weekKey`, so week navigation moves both
+`useDietStore` holds `plans` of foods (`{ id, name, target }`) and its own `log`, kept by the sync
+store like the planner's. It reads `planner.weekKey`, so week navigation moves both
 sections. It derives `foods`, `dayCounts`, `grandTotal`, `goalsMet` and `nextWeekHasPlan`, and
 offers `isEaten`, `totalFor`, `toggle`, `changeTarget` (0–7), `addFood` (goal 3, `false` for an
-empty name), `removeFood`, `copyToNextWeek`, `syncFromStorage` and `importData`. Food goals work
+empty name), `removeFood`, `copyToNextWeek`, `importData`, `adopt`, `adoptWeek` and `clear`. Food goals work
 like exercise goals (met once the count reaches a non-zero goal); foods have no daily target.
 
-Watchers persist state: a deep one per data payload and a shallow one for the settings. `writeKey`
-skips the write when the stored string already matches, and swallows storage errors, so with storage
-blocked or full the app keeps working in memory.
+The planner writes only the theme, merged into whatever `exercise-planner-settings-v1` already holds.
+`writeKey` skips the write when the stored string already matches, and swallows storage errors, so
+with storage blocked or full the app keeps working in memory.
 
 ## 4. Storage format and validation
 
-Exercise data is `{ plans, log }` under `exercise-planner-v2`, diet data the same shape under
-`exercise-planner-diet-v2`, and settings `{ accent, dailyPick, theme }` under
-`exercise-planner-settings-v1`. Browsers isolate storage per origin, so data does not move between
-hosts.
+| Key                                 | Holds                                                        | Written |
+| ----------------------------------- | ------------------------------------------------------------ | ------- |
+| `exercise-planner-session-v1`       | `{ user }`: the last signed-in user                          | yes     |
+| `exercise-planner-cache-v1:<user>`  | the user's state as `GET /api/state` returns it, with `revs` | yes     |
+| `exercise-planner-outbox-v1:<user>` | writes not yet sent (§7)                                     | yes     |
+| `exercise-planner-settings-v1`      | `theme`, read before first paint by `public/theme-init.js`   | theme   |
+| `exercise-planner-v2`, `-diet-v2`   | exercise and food `{ plans, log }` from before accounts      | never   |
+| `exercise-planner-v1`, `-diet-v1`   | the single-list format from before weekly plans              | never   |
+
+Since accounts, the keys from before them are only read: they hold what a browser recorded locally,
+for the first-login import. Their parsing, migration and validation below are unchanged. Browsers
+isolate storage per origin, so a cache belongs to one origin and one user.
 
 **Migration.** Before weekly plans, one list served every week: `{ exercises, log }` under
 `exercise-planner-v1` (the design prototype's key and shape) and `{ foods, log }` under
@@ -164,7 +183,9 @@ An import **merges and never deletes** (`mergeTracked`, `mergeSettings`):
   the store rather than re-reading the key keeps it right when storage is blocked. An import that
   applies settings saves them, so a second import does not offer them again.
 
-The confirm step names how many weeks and ticks the file adds (`mergeSummary`) before anything is
+Signed in, an import merges into the stores like any other change, and the sync store sends what
+it added: a plan write per new week and a tick write per new tick. The confirm step names how many
+weeks and ticks the file adds (`mergeSummary`) before anything is
 written. It is computed from the current state, so it stays right if another tab or a settings
 change lands while it is open. Importing the same file twice adds nothing the second time. Adding a week can change what
 an unplanned week carries forward from (§2). The import took its history from the file, so that is
@@ -209,9 +230,10 @@ import and export as well, so the API's tests will run the same files.
 - **Export and import live in Settings.** Data is per browser, so the export file is the way to
   back it up or move it to another origin (the dev server's data has no other way out). Import is
   additive by design: restoring an old backup over newer data cannot lose the newer data.
-- **Tabs stay in sync.** `App.vue` listens for `storage` events and calls both stores'
-  `syncFromStorage`, so a stale tab adopts another tab's edits instead of overwriting them with its
-  old state.
+- **Tabs stay in sync** through `storage` events on the user's cache key: a tab adopts another tab's
+  state instead of overwriting it, and their writes share one outbox (§7). The plan had proposed a
+  `BroadcastChannel`; the cache already lives in `localStorage`, whose events carry the same news
+  with no second channel to keep in step.
 - **Diet sits below the exercises** on the same page, sharing the week navigation and the print
   sheet. It has no daily target, so its footer counts are neutral rather than accent/orange.
 - **Print is black on white in either theme.** The print block in `src/styles/main.css` swaps the
@@ -239,3 +261,55 @@ their templates and have no `<style>` blocks. Everything global is in `src/style
 - **Sticky navbar.** `scroll-padding-top` on `<html>` keeps keyboard-focused content from scrolling
   under it.
 - **Print.** The `@media print` block described in §5.
+
+## 7. Accounts and sync
+
+**Signing in.** `session.init()` runs before the first render. A user remembered in
+`exercise-planner-session-v1` is signed in at once and their cache shown, then `GET /api/auth/me`
+confirms it. A 401 asks them to sign in again, keeping unsent writes; being offline keeps them
+working from the cache. With nobody remembered the app waits for the server, then shows the
+sign-in form. Invite and reset links arrive as `#/invite/<token>` and `#/reset/<token>`. The token
+goes to the API in request bodies only, and the fragment is cleared once used. Signing out ends the
+server session, then deletes the user's cache and outbox from the device. It is refused while
+offline: the cookie is HttpOnly, so only the server can end it.
+
+**Writes.** The stores change state at once. A deep watcher in the sync store diffs their state
+against `base`, the state the server is known to hold, and turns each difference into an operation
+in the outbox:
+
+- `plan`: a week's plan, sent as `PUT /api/plans/<section>/<week>` with the revision last seen;
+- `tick`: one day of one item, `PUT /api/ticks/…`, so devices ticking different days never collide;
+- `settings`: the accent and daily pick.
+
+A newer operation for the same plan, cell or settings replaces a queued one. Each carries an id, so
+the reply to one already in flight removes only that one. Plan and settings operations read their
+values when sent, so the server always gets the latest. Operations go out one at a time, in order.
+A tick on a week with no plan of its own creates the plan first, as on the device.
+
+| Reply                    | What happens                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------------- |
+| success                  | dequeued; a plan's new revision is stored                                              |
+| 409 with the server copy | that week shows the server's plan, with a notice                                       |
+| 409 with no server plan  | sent again as a create                                                                 |
+| offline, 502, 503, 504   | kept; retried after 5 s, doubling to 60 s, and at once when the browser is back online |
+| 401                      | kept; the sign-in form appears, and sending resumes after signing in                   |
+| any other refusal        | dropped with a console warning, so one bad write cannot block the rest                 |
+
+Two devices creating the same week from the same carried plan send identical items, which the API
+accepts without a conflict (P7), so the common case raises no notice.
+
+**Reads.** `GET /api/state` runs at start, on focus, on returning to a visible tab, and every minute
+while visible. It replaces local state only when the outbox is empty, and only if nothing changed
+locally while the read was in flight. A read first diffs the stores against `base` itself, because
+Vue runs the watcher after a reply can already have landed. Without that, an edit made in the same
+tick as the reply would be overwritten before it was ever queued. A refresh therefore never undoes
+an edit that has not reached the server.
+
+**The cache** holds the last state the stores showed, with each plan's revision, so a reload or a
+cold start offline shows data at once. It is written on every change and every read. Another tab's
+write to it arrives as a `storage` event, and this tab adopts it as both its state and its `base`:
+that tab's own writes are already in the shared outbox. The cache and outbox are validated with the
+storage normalisers when read, so a damaged key cannot break the app.
+
+`SyncStatus` shows "Loading your data…" before the first state arrives. Offline, it shows a retry
+button and how many changes are waiting. A conflict notice stays until dismissed.
