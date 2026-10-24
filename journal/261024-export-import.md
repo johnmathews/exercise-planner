@@ -8,8 +8,8 @@ John can export that data before `main` moves to the synced client.
 ## 1. What changed
 
 - Settings has a **Data** group. **Export** downloads `exercise-planner-YYYY-MM-DD.json`.
-  **Import…** reads one, shows what it would add ("Adds 2 weekly plans and 3 ticks. Nothing
-  already here changes."), and merges on **Import**. Errors show inline.
+  **Import…** reads one, shows what it would add ("Adds 2 weekly plans and 3 ticks. Existing plans
+  and ticks stay as they are."), and merges on **Import**. Errors show inline.
 - `src/lib/transfer.ts` holds the format (`exercise-planner-export`, version 1), `parseExport`,
   `mergeTracked`, `mergeSummary`, `mergeSettings` and the download. `storage.ts` now exports its
   normalisers so the file is validated exactly like stored data.
@@ -36,7 +36,7 @@ John can export that data before `main` moves to the synced client.
 
 ## 3. Verified
 
-- 164 tests pass (41 new). Lint, format, type-check and the build are clean, and coverage meets
+- 172 tests pass (49 new). Lint, format, type-check and the build are clean, and coverage meets
   the new thresholds. Each new test was seen failing first. Sabotaging the merge rule (incoming
   weeks win) failed two merge fixtures. Stubbing out the stores' `importData` failed four store
   tests, and dropping the confirm button's import call failed two App tests.
@@ -45,6 +45,27 @@ John can export that data before `main` moves to the synced client.
   second empty origin. Plans, log, diet and settings came out identical. A second import of the
   same file reported "Nothing new". The popover fits at 1280, 390 and 320px in light and dark,
   with no horizontal overflow. Print hides it, even when it is open.
+
+## 4. Review fixes
+
+A fresh-eyes review found no path that deletes data, and it recomputed every fixture by hand.
+It did find five problems, all fixed:
+
+- The confirm text said "Nothing already here changes". Adding an earlier week's plan can change
+  what a later unplanned week carries over, though, so the text now reads "Existing plans and
+  ticks stay as they are". A store test pins the carry-forward effect.
+- The summary was computed once, when the file was chosen. It is now recomputed on render, so a
+  settings click or another tab's write while it is open cannot make it wrong.
+- The planner decided "no saved settings" by re-reading the key. With storage blocked, that
+  meant an import overwrote settings the user had just changed. The store now tracks it in
+  `settingsSaved`. An import that applies settings also saves them, even when they equal the
+  defaults, so a second import does not offer them again.
+- New fixtures cover the literal `null` file and rounding at .5. JavaScript rounds half up, so
+  weight 0.125 becomes 0.13 where Python's `round()` would give 0.12. The API port must match
+  that.
+- The merge fixtures gained a count guard. The rejection tests now check that nothing at all was
+  stored, not only the exercise key. A storage-blocking test restores its mocks in `afterEach`,
+  after a failed assertion once leaked them into the next two tests.
 
 ## 4. Next
 

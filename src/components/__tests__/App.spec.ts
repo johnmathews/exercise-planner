@@ -387,7 +387,7 @@ describe('export and import', () => {
     // The tick gave this week its own plan, so only last week's exercise plan and this week's food
     // plan are new. Picking Blue saved settings, so the file's accent and daily pick don't apply.
     expect(wrapper.get('[data-testid="import-summary"]').text()).toBe(
-      'Adds 2 weekly plans and 3 ticks. Nothing already here changes.',
+      'Adds 2 weekly plans and 3 ticks. Existing plans and ticks stay as they are.',
     )
     expect(rowCells('Squats')[0]!.attributes('aria-pressed')).toBe('false')
 
@@ -405,7 +405,7 @@ describe('export and import', () => {
     await openSettings()
     await choose(jsonFile(EXPORT))
     expect(wrapper.get('[data-testid="import-summary"]').text()).toBe(
-      'Adds 3 weekly plans and 3 ticks, plus the accent and exercises per day. Nothing already here changes.',
+      'Adds 3 weekly plans and 3 ticks, plus the accent and exercises per day. Existing plans and ticks stay as they are.',
     )
     await button('Import').trigger('click')
     expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#bf5af2')
@@ -427,8 +427,19 @@ describe('export and import', () => {
       }),
     )
     expect(wrapper.get('[data-testid="import-summary"]').text()).toBe(
-      'Adds 1 weekly plan and 1 tick. Nothing already here changes.',
+      'Adds 1 weekly plan and 1 tick. Existing plans and ticks stay as they are.',
     )
+  })
+
+  it('keeps the summary true when settings change while it is open', async () => {
+    mountApp()
+    await openSettings()
+    await choose(jsonFile(EXPORT))
+    expect(wrapper.get('[data-testid="import-summary"]').text()).toContain('plus the accent')
+    await wrapper.get('button[aria-label="Blue"]').trigger('click')
+    expect(wrapper.get('[data-testid="import-summary"]').text()).not.toContain('plus the accent')
+    await button('Import').trigger('click')
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#0a84ff')
   })
 
   it('discards the file on Cancel', async () => {
@@ -466,7 +477,7 @@ describe('export and import', () => {
     const alert = wrapper.get('[role="alert"]')
     expect(alert.text()).toBe(message)
     expect(alert.attributes('data-tone')).toBe('error')
-    expect(localStorage.getItem('exercise-planner-v2')).toBeNull()
+    expect(localStorage.length).toBe(0)
   })
 
   it('reports a file that cannot be read', async () => {

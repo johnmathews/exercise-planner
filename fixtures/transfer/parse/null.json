@@ -1,0 +1,5 @@
+{
+  "description": "The literal null is valid JSON but is treated as not JSON, like a syntax error.",
+  "inputText": "null",
+  "expected": { "ok": false, "error": "json" }
+}

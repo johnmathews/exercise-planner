@@ -39,8 +39,8 @@ const panelId = useId()
 const LABEL = 'text-[11px] font-semibold tracking-wider text-muted uppercase'
 
 const fileInput = ref<HTMLInputElement | null>(null)
-/** A parsed file waiting for "Import", with the summary the confirm step shows. */
-const pending = ref<{ data: ExportData; summary: string } | null>(null)
+/** A parsed file waiting for "Import". */
+const pending = ref<ExportData | null>(null)
 const notice = ref<{ tone: 'error' | 'done'; text: string } | null>(null)
 
 // Each opening starts clean, rather than showing the last import's outcome.
@@ -63,6 +63,26 @@ function exportData(): void {
   )
 }
 
+/** What importing `data` would add to the current state. */
+function additions(data: ExportData): { plans: number; ticks: number; settings: boolean } {
+  const ex = mergeSummary({ plans: store.plans, log: store.log }, data.exercise)
+  const di = mergeSummary({ plans: diet.plans, log: diet.log }, data.diet)
+  // Exercise and food plans count separately: a week can gain either or both.
+  return {
+    plans: ex.weeks + di.weeks,
+    ticks: ex.ticks + di.ticks,
+    settings: data.settings !== null && store.savedSettings() === null,
+  }
+}
+
+// Called from the template rather than stored with the file, so it re-renders and stays true if
+// another tab or a settings click changes the state first.
+function summaryOf(data: ExportData): string {
+  const { plans, ticks, settings } = additions(data)
+  const extra = settings ? ', plus the accent and exercises per day' : ''
+  return `Adds ${plural(plans, 'weekly plan')} and ${plural(ticks, 'tick')}${extra}. Existing plans and ticks stay as they are.`
+}
+
 async function onFile(ev: Event): Promise<void> {
   const input = ev.target as HTMLInputElement
   const file = input.files?.[0]
@@ -83,21 +103,12 @@ async function onFile(ev: Event): Promise<void> {
     notice.value = { tone: 'error', text: IMPORT_ERRORS[result.error] }
     return
   }
-  const ex = mergeSummary({ plans: store.plans, log: store.log }, result.data.exercise)
-  const di = mergeSummary({ plans: diet.plans, log: diet.log }, result.data.diet)
-  // Exercise and food plans count separately: a week can gain either or both.
-  const plans = ex.weeks + di.weeks
-  const ticks = ex.ticks + di.ticks
-  const settings = result.data.settings !== null && store.savedSettings() === null
+  const { plans, ticks, settings } = additions(result.data)
   if (!plans && !ticks && !settings) {
     notice.value = { tone: 'done', text: 'Nothing new: everything in that file is already here.' }
     return
   }
-  const extra = settings ? ', plus the accent and exercises per day' : ''
-  pending.value = {
-    data: result.data,
-    summary: `Adds ${plural(plans, 'weekly plan')} and ${plural(ticks, 'tick')}${extra}. Nothing already here changes.`,
-  }
+  pending.value = result.data
 }
 
 function confirmImport(data: ExportData): void {
@@ -214,13 +225,9 @@ onBeforeUnmount(() => {
         />
       </div>
       <div v-if="pending" class="flex flex-col gap-2" role="group" aria-label="Confirm import">
-        <p class="text-sm text-fg" data-testid="import-summary">{{ pending.summary }}</p>
+        <p class="text-sm text-fg" data-testid="import-summary">{{ summaryOf(pending) }}</p>
         <div class="flex gap-2">
-          <button
-            type="button"
-            class="btn flex-1 justify-center"
-            @click="confirmImport(pending.data)"
-          >
+          <button type="button" class="btn flex-1 justify-center" @click="confirmImport(pending)">
             Import
           </button>
           <button type="button" class="btn flex-1 justify-center" @click="pending = null">

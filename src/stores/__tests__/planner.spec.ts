@@ -397,6 +397,7 @@ describe('importData', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   const squats = { id: 'sq', name: 'Squats', reps: 15, target: 4 }
@@ -434,6 +435,46 @@ describe('importData', () => {
     await nextTick()
     expect([s.accent, s.dailyPick]).toEqual(['#0a84ff', 5])
     expect(stored(SETTINGS_KEY)).toEqual({ accent: '#0a84ff', dailyPick: 5, theme: 'system' })
+  })
+
+  it('saves imported settings even when they equal the defaults', () => {
+    const s = usePlannerStore()
+    s.importData({ plans: {}, log: {} }, { accent: '#30d158', dailyPick: 3 })
+    expect(stored(SETTINGS_KEY)).toEqual({ accent: '#30d158', dailyPick: 3, theme: 'system' })
+    expect(s.savedSettings()).toEqual({ accent: '#30d158', dailyPick: 3 })
+  })
+
+  it('keeps settings changed in memory when storage is blocked', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    const s = usePlannerStore()
+    s.setAccent('#0a84ff')
+    await nextTick()
+    s.importData({ plans: {}, log: {} }, { accent: '#bf5af2', dailyPick: 5 })
+    expect([s.accent, s.dailyPick]).toEqual(['#0a84ff', 3])
+  })
+
+  it('adopts another tab’s settings write as saved', () => {
+    const s = usePlannerStore()
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ accent: '#ff9f0a', dailyPick: 2 }))
+    s.syncFromStorage(SETTINGS_KEY)
+    s.importData({ plans: {}, log: {} }, { accent: '#bf5af2', dailyPick: 5 })
+    expect([s.accent, s.dailyPick]).toEqual(['#ff9f0a', 2])
+  })
+
+  it('can change what an unplanned week carries forward from, but no plan or tick', () => {
+    const s = usePlannerStore()
+    const pushups = { id: 'pu', name: 'Push-ups', reps: 10, target: 4 }
+    s.importData({ plans: { '2026-10-05': [pushups] }, log: {} }, null)
+    expect(s.exercises.map((e) => e.id)).toEqual(['pu'])
+    // A later week's plan moves what the current, unplanned week carries over.
+    s.importData({ plans: { '2026-10-12': [squats] }, log: {} }, null)
+    expect(s.exercises.map((e) => e.id)).toEqual(['sq'])
+    expect(s.plans['2026-10-05']).toEqual([pushups])
   })
 
   it('treats a saved theme as saved settings', async () => {

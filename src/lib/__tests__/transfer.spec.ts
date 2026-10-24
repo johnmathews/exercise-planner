@@ -52,6 +52,10 @@ describe('parseExport fixtures', () => {
 })
 
 describe('mergeTracked fixtures', () => {
+  it('finds the fixture files', () => {
+    expect(cases('merge').length).toBeGreaterThanOrEqual(5)
+  })
+
   it.each(cases<MergeCase>('merge'))('%s', (_, c) => {
     expect(mergeTracked(c.existing, c.incoming)).toEqual(c.expected)
     expect(mergeSummary(c.existing, c.incoming)).toEqual(c.summary)

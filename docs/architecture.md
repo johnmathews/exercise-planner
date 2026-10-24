@@ -83,16 +83,17 @@ exercise's history stays in `log` without inflating the numbers.
 (replaces name, sets, reps, per-side and weight, keeping the id, goal and history; `false` for an
 empty name or an id not in the week), `removeExercise`, `copyToNextWeek`, `setConfigMode`,
 `prevWeek`, `nextWeek`, `thisWeek`, `refreshNow`, `syncFromStorage`, `setAccent`, `changeDailyPick`
-(clamps 1–8), `setTheme`, `importData` (merges an export into the plans, log and settings; see §4). The module also exports `exerciseDetails`, which gives the chips under a
-name: "3 × 10 reps" (or "10 reps / set" without sets, "3 sets" without reps, "8 each side" in place
-of "10 reps" when per side), then "12 kg" when weighted, or "—" for none of these.
+(clamps 1–8), `setTheme`, `importData` (merges an export into the plans, log and settings; see §4)
+and `savedSettings`. The module also exports `exerciseDetails`, which gives the chips under a name:
+"3 × 10 reps" (or "10 reps / set" without sets, "3 sets" without reps, "8 each side" in place of
+"10 reps" when per side), then "12 kg" when weighted, or "—" for none of these.
 
 `useDietStore` holds `plans` of foods (`{ id, name, target }`) and its own `log`, persisted together
 under `exercise-planner-diet-v2`. It reads `planner.weekKey`, so week navigation moves both
 sections. It derives `foods`, `dayCounts`, `grandTotal`, `goalsMet` and `nextWeekHasPlan`, and
 offers `isEaten`, `totalFor`, `toggle`, `changeTarget` (0–7), `addFood` (goal 3, `false` for an
-empty name), `removeFood`, `copyToNextWeek`, `syncFromStorage` and `importData`. Food goals work like exercise
-goals (met once the count reaches a non-zero goal); foods have no daily target.
+empty name), `removeFood`, `copyToNextWeek`, `syncFromStorage` and `importData`. Food goals work
+like exercise goals (met once the count reaches a non-zero goal); foods have no daily target.
 
 Watchers persist state: a deep one per data payload and a shallow one for the settings. `writeKey`
 skips the write when the stored string already matches, and swallows storage errors, so with storage
@@ -157,10 +158,14 @@ An import **merges and never deletes** (`mergeTracked`, `mergeSettings`):
 
 - A week that already has a plan keeps it; a week with no plan takes the file's.
 - Ticks are OR-ed per week, item and day, so an import can add ticks but never clears one.
-- The file's accent and daily pick apply only when this browser has no saved settings yet.
+- The file's accent and daily pick apply only when this browser has no saved settings yet: none
+  were stored when the app loaded, and none have been changed or imported since. Tracking this in
+  the store rather than re-reading the key keeps it right when storage is blocked. An import that
+  applies settings saves them, so a second import does not offer them again.
 
 The confirm step names how many weeks and ticks the file adds (`mergeSummary`) before anything is
-written; importing the same file twice adds nothing the second time. Adding a week can change what
+written. It is computed from the current state, so it stays right if another tab or a settings
+change lands while it is open. Importing the same file twice adds nothing the second time. Adding a week can change what
 an unplanned week carries forward from (§2). The import took its history from the file, so that is
 the intended result.
 
