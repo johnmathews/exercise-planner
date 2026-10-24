@@ -55,7 +55,8 @@ The linters ignore `design_handoff_exercise_planner/`, which holds vendored prot
 
 ## 4. Tests
 
-Tests sit in `__tests__/` next to the code they cover:
+The app's tests sit in `__tests__/` next to the code they cover (the API's are in `api/tests/`,
+listed in [api.md](api.md) §10):
 
 - `src/lib/__tests__/dates.spec.ts`: Monday maths, offsets, year boundary, the 2026-10-25 week (a
   DST change in EU timezones), labels.
@@ -114,6 +115,8 @@ Tests sit in `__tests__/` next to the code they cover:
     `normaliseState`;
   - `importFile`: queued writes first, then one server import and a read; offline, refused, 401,
     and nobody signed in.
+- `src/lib/__tests__/problems.spec.ts`: the sentence for every sign-in, link and sign-out refusal,
+  including the minutes left on a lockout.
 - `src/lib/__tests__/legacy.spec.ts`: reading the keys from before accounts (v2, the v1 migration,
   the accent and daily pick but never the theme, broken JSON, nothing worth offering).
 - `src/components/__tests__/ImportPrompt.spec.ts`: the first-login prompt through the app: what it

@@ -22,7 +22,9 @@ decides which week's plan a week shows; `src/lib/dates.ts` holds the week maths 
 sections; `TrackerRow` also asks `window.confirm` before emitting `remove`. `ExerciseGrid` and
 `DietSection` wire them to their store. `AddExerciseForm` and `EditExerciseDialog` share their field
 state and input cleaning through `useExerciseForm` (`src/composables/exerciseForm.ts`) and the
-`PerSideToggle` segmented control.
+`PerSideToggle` segmented control. `src/lib/problems.ts` turns a sign-in, link or sign-out refusal
+into a sentence for the forms; `src/composables/importSummary.ts` says what an import would add,
+for Settings → Import… and the first-login prompt.
 
 ```
 App.vue                 picks the screen (link, planner or sign-in), --accent variable, .dark class,
@@ -34,6 +36,7 @@ App.vue                 picks the screen (link, planner or sign-in), --accent va
 │   └── SettingsPopover.vue   who is signed in and Sign out, theme (System/Light/Dark), accent
 │                             swatches, exercises-per-day stepper, Export and Import… (see §4)
 ├── SyncStatus.vue      loading, offline and conflict messages above the planner
+├── ImportPrompt.vue    this browser's log from before accounts, offered once (§7)
 ├── WeekHeader.vue      H1 week label, daily-pick hint, grand total; in config mode "Copy plan to
 │                       next week" and a note when the plan is carried over
 ├── ExerciseGrid.vue    wires planner to a TrackerGrid: sets/reps/weight chips, edit, "Picked / N"
@@ -112,14 +115,15 @@ with storage blocked or full the app keeps working in memory.
 
 ## 4. Storage format and validation
 
-| Key                                 | Holds                                                        | Written |
-| ----------------------------------- | ------------------------------------------------------------ | ------- |
-| `exercise-planner-session-v1`       | `{ user }`: the last signed-in user                          | yes     |
-| `exercise-planner-cache-v1:<user>`  | the user's state as `GET /api/state` returns it, with `revs` | yes     |
-| `exercise-planner-outbox-v1:<user>` | writes not yet sent (§7)                                     | yes     |
-| `exercise-planner-settings-v1`      | `theme`, read before first paint by `public/theme-init.js`   | theme   |
-| `exercise-planner-v2`, `-diet-v2`   | exercise and food `{ plans, log }` from before accounts      | never   |
-| `exercise-planner-v1`, `-diet-v1`   | the single-list format from before weekly plans              | never   |
+| Key                                 | Holds                                                           | Written |
+| ----------------------------------- | --------------------------------------------------------------- | ------- |
+| `exercise-planner-session-v1`       | `{ user }`: the last signed-in user                             | yes     |
+| `exercise-planner-cache-v1:<user>`  | the user's state as `GET /api/state` returns it, with `revs`    | yes     |
+| `exercise-planner-outbox-v1:<user>` | writes not yet sent (§7)                                        | yes     |
+| `exercise-planner-import-v1:<user>` | the first-login prompt's answer, `imported` or `dismissed` (§7) | yes     |
+| `exercise-planner-settings-v1`      | `theme`, read before first paint by `public/theme-init.js`      | theme   |
+| `exercise-planner-v2`, `-diet-v2`   | exercise and food `{ plans, log }` from before accounts         | never   |
+| `exercise-planner-v1`, `-diet-v1`   | the single-list format from before weekly plans                 | never   |
 
 Since accounts, nothing writes the keys from before them. They stay because they hold what a browser
 recorded locally, which the first-login import (§7) reads with the parsing, migration and
@@ -307,7 +311,7 @@ A tick on a week with no plan of its own creates the plan first, as on the devic
 | any other refusal                                   | dropped, so one bad write cannot block the rest, with a notice that it was undone      |
 
 Two devices creating the same week from the same carried plan send identical items, which the API
-accepts without a conflict (P7), so the common case raises no notice.
+accepts without a conflict (P7 in [decisions.md](decisions.md)), so the common case raises no notice.
 
 **Reads.** `GET /api/state` runs at start, on focus, on returning to a visible tab, and every minute
 while visible. It replaces local state only when the outbox is empty, and only if nothing changed

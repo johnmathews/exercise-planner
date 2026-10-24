@@ -113,17 +113,26 @@ services:
     restart: unless-stopped
 ```
 
-Then mint the first account and open the link it prints:
+Create the data directory first, owned by the API's user. Docker would otherwise create it as
+root, and the API (uid 10001) could not write its database:
 
 ```bash
+mkdir fitness-data && sudo chown 10001:10001 fitness-data
+```
+
+Then start both, mint the first account, and open the link it prints:
+
+```bash
+docker compose up -d
 docker compose exec fitness-api ep-admin invite <name>
 ```
 
 Serve it over HTTPS: the session cookie is `Secure`. For a plain-http trial, set
 `COOKIE_SECURE: 'false'` on the API. Update with `docker compose pull && docker compose up -d`.
 `GET /healthz` (nginx) and `GET /api/healthz` (the API) both return 200.
-`docker compose up --build` in this repo runs both from source, and `scripts/compose-smoke.sh`
-checks the whole path end to end.
+`docker compose up --build` in this repo runs both from source, serving the app on
+`http://localhost:8083` (its `PUBLIC_ORIGIN`), and `scripts/compose-smoke.sh` checks the whole path
+end to end.
 
 [docs/deployment.md](docs/deployment.md) covers the images, nginx and CI, and
 [docs/api.md](docs/api.md) the API, accounts, backups and `ep-admin`.
@@ -136,6 +145,7 @@ checks the whole path end to end.
 | [docs/development.md](docs/development.md)                                    | Toolchain, scripts, conventions, tests               |
 | [docs/deployment.md](docs/deployment.md)                                      | Docker images, nginx, CI, GHCR publishing            |
 | [docs/api.md](docs/api.md)                                                    | The API service: endpoints, accounts, CLI, backups   |
+| [docs/decisions.md](docs/decisions.md)                                        | Why accounts and sync are built the way they are     |
 | [design_handoff_exercise_planner/](design_handoff_exercise_planner/README.md) | The original design spec and HTML prototype          |
 
 Development history lives in [`journal/`](journal/).
