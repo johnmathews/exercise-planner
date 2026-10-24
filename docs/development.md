@@ -14,7 +14,7 @@
 - Vue 3.5, Pinia 4, Vite 8, Tailwind CSS 4, TypeScript 6, Vitest 4 with jsdom, ESLint 10 + oxlint,
   Prettier with `prettier-plugin-tailwindcss`.
 - The API in `api/` uses Python 3.13 with uv, FastAPI, pytest with coverage, ruff and mypy
-  (strict). [api.md](api.md) §9 has its commands. Its tests run the same `fixtures/transfer/` cases
+  (strict). [api.md](api.md) §10 has its commands. Its tests run the same `fixtures/transfer/` cases
   as Vitest, so a validation rule changed in `src/lib/storage.ts` must change in
   `api/src/exercise_planner_api/validate.py` too, and the reverse.
 

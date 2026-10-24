@@ -1,6 +1,7 @@
 """SQLite connections, the schema, and its migrations (docs/api.md §2)."""
 
 import sqlite3
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -91,16 +92,31 @@ def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     conn.execute("COMMIT")
 
 
-def migrate(conn: sqlite3.Connection) -> None:
-    """Bring the schema to SCHEMA_VERSION; each step and its version bump commit together."""
-    conn.execute("PRAGMA journal_mode = WAL")
-    version: int = conn.execute("PRAGMA user_version").fetchone()[0]
-    for number, script in enumerate(MIGRATIONS[version:], start=version + 1):
+def _use_wal(conn: sqlite3.Connection, attempts: int = 50) -> None:
+    """Switch the file to WAL. The switch needs an exclusive lock that the busy timeout does not
+    wait for, so a connection racing another one at startup retries briefly."""
+    for attempt in range(attempts):
         try:
-            conn.executescript(
-                f"BEGIN IMMEDIATE; {script}; PRAGMA user_version = {number}; COMMIT;"
-            )
-        except BaseException:
-            if conn.in_transaction:
-                conn.execute("ROLLBACK")
-            raise
+            if conn.execute("PRAGMA journal_mode = WAL").fetchone()[0] == "wal":
+                return
+        except sqlite3.OperationalError as e:
+            if "locked" not in str(e) or attempt == attempts - 1:
+                raise
+        time.sleep(0.05)
+    raise sqlite3.OperationalError("could not switch the database to WAL")
+
+
+def migrate(conn: sqlite3.Connection) -> None:
+    """Bring the schema to SCHEMA_VERSION; each step and its version bump commit together.
+
+    The version is read under the write lock, so the API and `ep-admin` starting at the same time
+    cannot both apply a step.
+    """
+    _use_wal(conn)
+    while True:
+        with transaction(conn):
+            version: int = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version >= len(MIGRATIONS):
+                return
+            # Outside LEGACY_TRANSACTION_CONTROL, executescript leaves the transaction open.
+            conn.executescript(f"{MIGRATIONS[version]}; PRAGMA user_version = {version + 1};")

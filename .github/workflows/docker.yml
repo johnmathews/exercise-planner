@@ -30,24 +30,37 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: false
           cache-from: type=gha,scope=${{ matrix.name }}
-      # The API image is built without QEMU (target wheels on the native platform), so prove each
-      # architecture actually runs: amd64 serves /api/healthz, arm64 imports its native modules.
+      # The multi-arch build above runs before QEMU is set up, so it proves the API image needs
+      # none. Then prove each architecture runs: amd64 serves /api/healthz, and arm64 (under QEMU)
+      # imports its native modules.
+      - uses: docker/build-push-action@v7
+        if: matrix.name == 'api'
+        with:
+          context: api
+          platforms: linux/amd64
+          load: true
+          tags: api-smoke:amd64
+          cache-from: type=gha,scope=api
       - name: Smoke-test the amd64 API image
         if: matrix.name == 'api'
         run: |
-          docker buildx build --platform linux/amd64 --load -t api-smoke:amd64 \
-            --cache-from type=gha,scope=api api
           docker run -d --name api -p 8000:8000 -e PUBLIC_ORIGIN=https://smoke.example api-smoke:amd64
           for _ in $(seq 1 30); do curl -sf http://127.0.0.1:8000/api/healthz && exit 0; sleep 1; done
           docker logs api
           exit 1
       - uses: docker/setup-qemu-action@v4
         if: matrix.name == 'api'
+      - uses: docker/build-push-action@v7
+        if: matrix.name == 'api'
+        with:
+          context: api
+          platforms: linux/arm64
+          load: true
+          tags: api-smoke:arm64
+          cache-from: type=gha,scope=api
       - name: Smoke-test the arm64 API image
         if: matrix.name == 'api'
         run: |
-          docker buildx build --platform linux/arm64 --load -t api-smoke:arm64 \
-            --cache-from type=gha,scope=api api
           docker run --rm --platform linux/arm64 api-smoke:arm64 \
             python -c "import argon2, pydantic_core, exercise_planner_api.app; print('ok')"
 

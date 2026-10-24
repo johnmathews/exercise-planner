@@ -5,6 +5,8 @@ import re
 import secrets
 import sqlite3
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Literal
 
@@ -19,6 +21,11 @@ DEFAULT_HASHER = PasswordHasher()
 HASHER = DEFAULT_HASHER
 # One hash at a time: each takes 64 MiB, and the container's memory limit is sized for one.
 _HASHING = threading.Semaphore(1)
+# Logins wait for the hasher on a worker thread. Bounding the queue and the wait keeps a flood of
+# logins from occupying every thread the API has; the excess gets 503 `busy` instead.
+MAX_WAITING = 8
+HASH_WAIT = 5.0
+_WAITING = threading.BoundedSemaphore(MAX_WAITING)
 
 DAY = 86_400
 MIN_PASSWORD, MAX_PASSWORD = 10, 256
@@ -44,13 +51,29 @@ class SessionUser:
     refreshed: bool
 
 
+@contextmanager
+def _hashing() -> Iterator[None]:
+    """Hold the hasher, or raise AuthError `busy` when the queue is full or the wait too long."""
+    if not _WAITING.acquire(blocking=False):
+        raise AuthError("busy", retry_after=1)
+    try:
+        if not _HASHING.acquire(timeout=HASH_WAIT):
+            raise AuthError("busy", retry_after=1)
+        try:
+            yield
+        finally:
+            _HASHING.release()
+    finally:
+        _WAITING.release()
+
+
 def hash_password(password: str) -> str:
-    with _HASHING:
+    with _hashing():
         return HASHER.hash(password)
 
 
 def verify_password(password_hash: str, password: str) -> bool:
-    with _HASHING:
+    with _hashing():
         try:
             return HASHER.verify(password_hash, password)
         except (VerificationError, InvalidHashError):
@@ -76,8 +99,7 @@ def login(conn: sqlite3.Connection, config: Config, username: str, password: str
     """The user's id, or AuthError `invalid` or `locked`."""
     now = config.clock()
     row = conn.execute(
-        "SELECT id, password_hash, disabled, failed_logins, failed_since, locked_until"
-        " FROM users WHERE username = ?",
+        "SELECT id, password_hash, locked_until FROM users WHERE username = ?",
         (username,),
     ).fetchone()
     if row is None:
@@ -87,18 +109,23 @@ def login(conn: sqlite3.Connection, config: Config, username: str, password: str
         raise AuthError("locked", retry_after=row["locked_until"] - now)
     # Verify outside any transaction: a hash takes long enough that holding the lock would block.
     ok = verify_password(row["password_hash"], password)
-    if ok and not row["disabled"]:
-        conn.execute(
-            "UPDATE users SET failed_logins = 0, failed_since = NULL, locked_until = NULL"
-            " WHERE id = ?",
-            (row["id"],),
-        )
-        return int(row["id"])
     window = config.lockout_minutes * 60
     with transaction(conn):
+        # Read again under the write lock: a lock set by requests that finished while this one
+        # waited for the hasher must hold, or a burst of parallel guesses would get around it.
         fresh = conn.execute(
-            "SELECT failed_logins, failed_since FROM users WHERE id = ?", (row["id"],)
+            "SELECT disabled, failed_logins, failed_since, locked_until FROM users WHERE id = ?",
+            (row["id"],),
         ).fetchone()
+        if fresh["locked_until"] is not None and fresh["locked_until"] > now:
+            raise AuthError("locked", retry_after=fresh["locked_until"] - now)
+        if ok and not fresh["disabled"]:
+            conn.execute(
+                "UPDATE users SET failed_logins = 0, failed_since = NULL, locked_until = NULL"
+                " WHERE id = ?",
+                (row["id"],),
+            )
+            return int(row["id"])
         stale = fresh["failed_since"] is None or now - fresh["failed_since"] >= window
         failures = 1 if stale else fresh["failed_logins"] + 1
         since = now if stale else fresh["failed_since"]

@@ -9,7 +9,7 @@ services:
   fitness-api:
     build: ./api
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       PUBLIC_ORIGIN: http://localhost:8083
       COOKIE_SECURE: "false"

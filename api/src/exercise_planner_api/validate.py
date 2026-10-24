@@ -10,6 +10,7 @@ import copy
 import json
 import math
 import re
+import sys
 from typing import Any, Literal, TypedDict
 
 EXPORT_FORMAT = "exercise-planner-export"
@@ -68,9 +69,19 @@ class ExportError(ValueError):
         self.code = code
 
 
-def is_number(v: object) -> bool:
-    """JavaScript's `typeof v === 'number' && Number.isFinite(v)`; bool is not a number."""
-    return isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v)
+def as_number(v: object) -> float | None:
+    """What JavaScript's JSON.parse makes of `v`, when that is a finite number; else None.
+
+    JavaScript has one number type: an integer past a double's range parses as Infinity, and a
+    large one rounds to the nearest double. `bool` is not a number.
+    """
+    if isinstance(v, bool) or not isinstance(v, int | float):
+        return None
+    if isinstance(v, int):
+        if abs(v) > sys.float_info.max:
+            return None
+        v = float(v)
+    return v if math.isfinite(v) else None
 
 
 def js_round(x: float) -> int:
@@ -80,7 +91,8 @@ def js_round(x: float) -> int:
 
 
 def to_int(v: object, fallback: int) -> int:
-    return js_round(v) if is_number(v) else fallback  # type: ignore[arg-type]
+    n = as_number(v)
+    return fallback if n is None else js_round(n)
 
 
 def clamp(n: int, lo: int, hi: int) -> int:
@@ -94,9 +106,12 @@ def whole(x: float) -> int | float:
 
 def normalise_weight(v: object) -> int | float | None:
     """A usable weight in kg, rounded to 2 decimals and capped; None means "no weight"."""
-    if not is_number(v):
+    n = as_number(v)
+    if n is None:
         return None
-    kg = js_round(v * 100) / 100  # type: ignore[operator]
+    scaled = n * 100
+    # Scaling can overflow to ±Infinity, which Math.round passes through and the cap then catches.
+    kg = js_round(scaled) / 100 if math.isfinite(scaled) else scaled
     return whole(min(MAX_WEIGHT, kg)) if kg > 0 else None
 
 
@@ -151,7 +166,12 @@ def normalise_log(v: object) -> Log:
     for week, entries in v.items():
         if not is_week(week) or not isinstance(entries, dict):
             continue
-        log[week] = {i: normalise_days(d) for i, d in entries.items() if isinstance(d, list)}
+        # JavaScript drops a `__proto__` entry: assigning it sets the object's prototype instead.
+        log[week] = {
+            i: normalise_days(d)
+            for i, d in entries.items()
+            if isinstance(d, list) and i != "__proto__"
+        }
     return log
 
 
@@ -188,11 +208,18 @@ def _reject_constant(name: str) -> None:
 
 
 def parse_json(text: str) -> object:
-    """`JSON.parse`, which has no NaN or Infinity; None for anything that is not JSON."""
+    """`JSON.parse`, which has no NaN or Infinity; None for anything that is not JSON.
+
+    Two cases differ from JavaScript on purpose. Nesting deep enough to exhaust Python's recursion
+    limit, which no export comes near, and strings holding a lone surrogate (`"\\ud800"`), which
+    SQLite cannot store as UTF-8, both count as not JSON.
+    """
     try:
-        return json.loads(text, parse_constant=_reject_constant)
-    except ValueError:
+        parsed = json.loads(text, parse_constant=_reject_constant)
+        json.dumps(parsed, ensure_ascii=False).encode("utf-8")
+    except (ValueError, RecursionError):
         return None
+    return parsed
 
 
 def section(name: Section, v: object) -> Tracked:
@@ -208,8 +235,7 @@ def parse_export(text: str) -> ExportData:
         raise ExportError("json")
     if not isinstance(parsed, dict) or parsed.get("format") != EXPORT_FORMAT:
         raise ExportError("format")
-    version = parsed.get("version")
-    if not is_number(version) or version != EXPORT_VERSION:
+    if as_number(parsed.get("version")) != EXPORT_VERSION:
         raise ExportError("version")
     settings = parsed.get("settings")
     return {

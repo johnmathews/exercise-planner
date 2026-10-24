@@ -49,7 +49,8 @@ carries `Cache-Control: no-store`.
 **Writes** (`POST`, `PUT`) must send `Content-Type: application/json` and an `Origin` header equal
 to `PUBLIC_ORIGIN`; otherwise they get 403 `origin` or 415 `content-type`. `SameSite=Lax` alone
 would not stop a request from another `*.itsa-pizza.com` host, because the browser counts it as
-same-site. Bodies over 1 MiB get 413.
+same-site. Bodies over 1 MiB get 413 `too-large`, counted as they stream in, so a chunked body is
+cut off at the limit rather than read whole. A body with nothing to send, such as logout's, is `{}`.
 
 | Method and path                            | Auth    | Does                                                                 |
 | ------------------------------------------ | ------- | -------------------------------------------------------------------- |
@@ -97,11 +98,13 @@ the client shows.
   `password`, and a used, expired or unknown link gets 410 `gone`.
 - **Passwords** are hashed with argon2id at argon2-cffi's defaults (64 MiB, 3 passes,
   parallelism 4). One hash runs at a time (a process-wide semaphore), so concurrent logins queue
-  instead of multiplying memory.
+  instead of multiplying memory. At most eight logins wait, each for at most five seconds. The rest
+  get 503 `busy` with `Retry-After: 1`, so a flood of logins cannot occupy every worker thread.
 - **Lockout.** Five wrong passwords within 15 minutes lock the account for 15 minutes. While
   locked, every login gets 423 `locked`, even with the right password. A success resets the count.
-  An unknown username costs the same hash as a known one and gets the same 401 `invalid`, so the
-  response does not reveal which usernames exist. Traefik's rate limit sits in front of all of it.
+  The lock is read again after the hash, under the write lock, so a burst of parallel guesses
+  cannot get past it or clear it. An unknown username costs the same hash as a known one and gets
+  the same 401 `invalid`. Traefik's rate limit sits in front of all of it.
 - **Sessions** are 32 random bytes in an `HttpOnly; Secure; SameSite=Lax; Path=/` cookie named
   `__Host-session`. They last 90 days from the last use: a request more than a day after the last
   refresh moves the expiry forward and re-sends the cookie. Logout ends one session.
@@ -137,21 +140,48 @@ A background thread writes `$DATA_DIR/backup/fitness-YYYYMMDD.db` with `VACUUM I
 database even while the API is writing. PBS backs up the whole directory on infra-vm. Settings →
 Export gives each person a JSON copy of their own data as well.
 
-## 8. Validation parity
+## 8. Accepted risks
+
+Reviewed and kept on purpose, for a service with a handful of invited users:
+
+- **Lockout reveals and can block a username.** Five wrong passwords lock a real account, but an
+  unknown name never locks, so guessing shows which names exist. The same five guesses every 15
+  minutes keep someone out. The lock is per account because the LAN port means no client IP can
+  be trusted. `ep-admin reset` clears it.
+- **Sessions have no absolute lifetime.** A session used at least every 90 days lasts
+  indefinitely. Logout, `revoke-sessions`, a reset and `disable` all end it.
+- **A signed-in user can grow their own data without a cap.** Week keys only need the
+  `YYYY-MM-DD` shape, and plans and logs have no size limit beyond 1 MiB per request. A cap would
+  change the export format on both sides, so it waits until it is needed.
+
+## 9. Validation parity
 
 `validate.py` mirrors the TypeScript normalisers rule for rule, including the places where Python
-differs by default. Numbers round half up like `Math.round`, not to even, and `true` is not a
-number. `NaN` and `Infinity` are not JSON. Week keys need ASCII digits, and a trailing newline is
-not allowed. `tests/test_parity.py` runs every case in `fixtures/transfer/`, the same files the
-Vitest suite runs. A rule changed on one side without the other fails one of the two suites.
+differs by default:
 
-## 9. Development
+- Numbers round half up like `Math.round`, not to even.
+- `true` is not a number.
+- An integer past a double's range is `Infinity`, and so falls back; a large one rounds to the
+  nearest double.
+- `NaN` and `Infinity` are not JSON.
+- Week keys need ASCII digits, and a trailing newline is not allowed.
+- A log entry keyed `__proto__` is dropped.
+
+`tests/test_parity.py` runs every case in `fixtures/transfer/`, the same files the Vitest suite
+runs. A rule changed on one side without the other fails one of the two suites.
+
+Two inputs that JavaScript parses are refused on purpose as `json`. One is nesting deep enough to
+exhaust Python's recursion limit. The other is a string holding a lone surrogate, which SQLite
+cannot store as UTF-8. Neither can come from the app. The API also accepts a body that starts with
+a UTF-8 byte-order mark, as the browser's `File.text()` does.
+
+## 10. Development
 
 ```sh
 cd api
 uv sync                                  # Python 3.13 and the dev tools
 uv run pytest                            # tests
-uv run coverage run -m pytest && uv run coverage report   # fails under 95%
+uv run coverage run -m pytest && uv run coverage report   # fails under 98%
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
 PUBLIC_ORIGIN=http://127.0.0.1:5173 COOKIE_SECURE=false DATA_DIR=./.data \

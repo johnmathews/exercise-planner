@@ -276,3 +276,47 @@ def test_two_redemptions_race_and_only_one_wins(conn: sqlite3.Connection, config
     second.close()
     assert sorted(map(str, results))[1] == "gone"
     assert conn.execute("SELECT count(*) FROM users").fetchone()[0] == 1
+
+
+def test_a_lock_set_while_hashing_wins_over_a_correct_password(
+    conn: sqlite3.Connection, config: Config, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Requests already waiting for the hasher when a lock lands must not slip past or clear it."""
+    make_user(conn, config)
+    real = auth.verify_password
+
+    def lock_meanwhile(password_hash: str, password: str) -> bool:
+        conn.execute("UPDATE users SET locked_until = ?", (clock() + 900,))
+        return real(password_hash, password)
+
+    monkeypatch.setattr(auth, "verify_password", lock_meanwhile)
+    with pytest.raises(AuthError) as e:
+        auth.login(conn, config, "alice", PASSWORD)
+    assert e.value.code == "locked"
+    with pytest.raises(AuthError, match="locked"):
+        auth.login(conn, config, "alice", "wrong password!")
+    # Neither attempt cleared the lock or counted towards a new one.
+    row = conn.execute("SELECT failed_logins, locked_until FROM users").fetchone()
+    assert (row[0], row[1]) == (0, clock() + 900)
+
+
+def test_logins_beyond_the_queue_are_turned_away(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(auth, "_WAITING", threading.BoundedSemaphore(1))
+    assert auth._WAITING.acquire(blocking=False)
+    try:
+        with pytest.raises(AuthError) as e:
+            auth.hash_password("pw")
+        assert (e.value.code, e.value.retry_after) == ("busy", 1)
+    finally:
+        auth._WAITING.release()
+
+
+def test_a_login_that_waits_too_long_for_the_hasher_is_turned_away(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(auth, "HASH_WAIT", 0.01)
+    monkeypatch.setattr(auth, "_HASHING", threading.Semaphore(0))  # someone else is hashing
+    with pytest.raises(AuthError, match="busy"):
+        auth.verify_password("h", "pw")
+    assert auth._WAITING.acquire(blocking=False)  # the queue slot was given back
+    auth._WAITING.release()

@@ -45,9 +45,9 @@ calls it yet; the client switches over in W3.
 
 ## 3. Verified
 
-- 135 pytest tests pass, covering every line and 161 of 164 branches. ruff and
-  `mypy --strict` are clean, `pip-audit` finds no known vulnerabilities, and Vitest passes 32
-  transfer tests, including the four new fixtures.
+- After the review fixes (§4), 149 pytest tests pass, covering every line and 180 of 182
+  branches. ruff and `mypy --strict` are clean, and `pip-audit` finds no known
+  vulnerabilities. Vitest passes 35 transfer tests, including the seven new fixtures.
 - Each test module was written before its code and failed first. Breaking a rule turned the
   matching test red each time:
   - Python's `round()` instead of `Math.round`, `\d` instead of `[0-9]`, and `json.loads`
@@ -63,6 +63,39 @@ calls it yet; the client switches over in W3.
   - Memory peaked at 107–109 MiB with hashing (43 MiB idle), so W5 should set `mem_limit: 160m`.
   - Four concurrent logins ran one after another (37, 67, 95, 123 ms).
 
-## 4. Next
+## 4. Review fixes
+
+Two fresh-eyes reviews ran: one on security, which ran probes against the app, and one on
+correctness. Neither found anything Critical or High. Fixed:
+
+- **Parallel guesses got around the lockout.** The lock was checked before a request waited for
+  the hasher, so 100 parallel wrong guesses got 40 through instead of 5. A correct guess in the
+  burst also cleared the lock. The lock is now read again under the write lock after the hash.
+- **Chunked bodies were read whole before the size check.** One 512 MiB request pushed memory to
+  1.58 GB. The body is now counted as it streams and cut off at 1 MiB. An ASGI-level test proves
+  the app stops pulling chunks; TestClient drains the body first, so it could not. The
+  development compose file binds port 8000 to localhost.
+- **Logins could fill the worker thread pool** while waiting for the hasher. At most eight wait,
+  each for at most five seconds; the rest get 503 `busy`.
+- **The arm64 image needed QEMU after all.** The runtime stage had a `RUN` step. It now holds
+  only `COPY` steps, and CI's multi-arch build runs before QEMU is set up, which proves it. The
+  smoke builds use `build-push-action`, so they get the GitHub Actions cache.
+- **Parity gaps that returned 500.** Huge numbers raised `OverflowError` and deep nesting raised
+  `RecursionError`. Python now treats huge numbers the way JavaScript does (Infinity, nearest
+  double), drops a `__proto__` log key as JavaScript does, and refuses deep nesting and lone
+  surrogates as `json` on purpose. Three new shared fixtures pin the cases both sides must
+  agree on.
+- **Migrations raced** when the API and `ep-admin` start together. The version is now read under
+  the write lock, and the WAL switch retries while another connection holds the lock. A probe
+  showed it was the cause in 28 of 28 failures.
+- **Docs:** `docs/api.md` §8 now lists the accepted risks:
+  - the lockout can reveal or block a username (the doc had wrongly said responses don't reveal
+    names);
+  - sessions have no absolute lifetime;
+  - a user's data has no size cap.
+
+  It also corrects the coverage floor and says that logout takes `{}`.
+
+## 5. Next
 
 W3 points nginx at `fitness-api:8000` and moves the client onto the API.

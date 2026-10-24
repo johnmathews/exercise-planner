@@ -78,3 +78,62 @@ def test_a_failed_migration_leaves_the_version(
     assert c.execute("PRAGMA user_version").fetchone()[0] == 0
     assert c.execute("SELECT count(*) FROM sqlite_master WHERE name = 'a'").fetchone()[0] == 0
     c.close()
+
+
+def test_concurrent_migrations_apply_each_step_once(tmp_path: Path) -> None:
+    import threading
+
+    conns = [connect(tmp_path / "f.db") for _ in range(4)]
+    barrier = threading.Barrier(len(conns))
+    errors: list[BaseException] = []
+
+    def go(c: sqlite3.Connection) -> None:
+        barrier.wait()
+        try:
+            migrate(c)
+        except BaseException as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=go, args=(c,)) for c in conns]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert conns[0].execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    for c in conns:
+        c.close()
+
+
+class FakeConn:
+    """Stands in for a connection whose WAL switch keeps meeting another connection's lock."""
+
+    def __init__(self, failures: int, error: str = "database is locked", mode: str = "wal") -> None:
+        self.failures = failures
+        self.error = error
+        self.mode = mode
+        self.calls = 0
+
+    def execute(self, sql: str) -> "FakeConn":
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise sqlite3.OperationalError(self.error)
+        return self
+
+    def fetchone(self) -> tuple[str]:
+        return (self.mode,)
+
+
+def test_wal_switch_retries_while_locked(monkeypatch: pytest.MonkeyPatch) -> None:
+    from exercise_planner_api import db
+
+    monkeypatch.setattr("exercise_planner_api.db.time.sleep", lambda _: None)
+    fake = FakeConn(failures=3)
+    db._use_wal(fake)  # type: ignore[arg-type]
+    assert fake.calls == 4
+    with pytest.raises(sqlite3.OperationalError, match="locked"):
+        db._use_wal(FakeConn(failures=99), attempts=3)  # type: ignore[arg-type]
+    with pytest.raises(sqlite3.OperationalError, match="disk I/O"):
+        db._use_wal(FakeConn(failures=1, error="disk I/O error"))  # type: ignore[arg-type]
+    with pytest.raises(sqlite3.OperationalError, match="could not switch"):
+        db._use_wal(FakeConn(failures=0, mode="memory"), attempts=2)  # type: ignore[arg-type]

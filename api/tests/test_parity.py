@@ -74,3 +74,20 @@ def test_merge_does_not_alias_its_inputs() -> None:
     merged["log"]["2026-10-19"]["pu"][1] = True
     assert incoming["plans"]["2026-10-19"][0]["reps"] == 10
     assert incoming["log"]["2026-10-19"]["pu"][1] is False
+
+
+def test_deliberate_divergences_from_javascript() -> None:
+    """Inputs JavaScript accepts that the API refuses as `json`; neither can come from the app."""
+    deep = (
+        '{"format": "exercise-planner-export", "version": 1, "x": '
+        + "[" * 100_000
+        + "]" * 100_000
+        + "}"
+    )
+    surrogate = (
+        '{"format": "exercise-planner-export", "version": 1,'
+        ' "exercise": {"log": {"2026-10-19": {"\\ud800": [true]}}}}'
+    )
+    for text in (deep, surrogate):
+        with pytest.raises(ExportError, match="json"):
+            parse_export(text)

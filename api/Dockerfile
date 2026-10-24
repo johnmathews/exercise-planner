@@ -1,5 +1,6 @@
-# The build stage runs on the runner's own platform and installs wheels for the target platform,
-# so the arm64 image needs no QEMU: every dependency ships binary wheels for both.
+# The build stage runs on the runner's own platform and installs wheels for the target platform;
+# every dependency ships binary wheels for both. The runtime stage holds only COPY steps, so no
+# instruction ever runs on the target platform and the arm64 image builds without QEMU.
 FROM --platform=$BUILDPLATFORM ghcr.io/astral-sh/uv:0.13.0 AS uv
 
 FROM --platform=$BUILDPLATFORM python:3.13-slim AS build
@@ -16,13 +17,13 @@ RUN uv export --frozen --no-dev --no-emit-project -o requirements.txt \
  && uv pip install --target /app --python-version 3.13 --python-platform "$platform" \
       --only-binary :all: -r requirements.txt
 COPY src/exercise_planner_api /app/exercise_planner_api
+RUN printf '#!/bin/sh\nexec python -m exercise_planner_api.cli "$@"\n' > /ep-admin && mkdir /data
 
 FROM python:3.13-slim
 ENV PYTHONPATH=/app PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 DATA_DIR=/data
 COPY --from=build /app /app
-RUN printf '#!/bin/sh\nexec python -m exercise_planner_api.cli "$@"\n' > /usr/local/bin/ep-admin \
- && chmod +x /usr/local/bin/ep-admin \
- && mkdir /data && chown 10001:10001 /data
+COPY --from=build --chmod=755 /ep-admin /usr/local/bin/ep-admin
+COPY --from=build --chown=10001:10001 /data /data
 USER 10001:10001
 VOLUME /data
 EXPOSE 8000

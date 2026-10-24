@@ -19,7 +19,14 @@ from .validate import ExportError, Section, is_week, parse_export, parse_json
 MAX_BODY = 1 << 20
 WRITES = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # The HTTP status for each refusal code an auth step can raise.
-AUTH_STATUS = {"invalid": 401, "locked": 423, "password": 400, "gone": 410, "exists": 409}
+AUTH_STATUS = {
+    "invalid": 401,
+    "locked": 423,
+    "busy": 503,
+    "password": 400,
+    "gone": 410,
+    "exists": 409,
+}
 
 
 class ApiError(Exception):
@@ -102,11 +109,16 @@ def create_app(config: Config, run_backups: bool = True) -> FastAPI:
     Conn = Annotated[sqlite3.Connection, Depends(get_conn)]
 
     async def body_text(request: Request) -> str:
-        raw = await request.body()
-        if len(raw) > MAX_BODY:
-            raise ApiError(413, "too-large")
+        # Counted as it arrives: a chunked body has no Content-Length for the guard to check, and
+        # reading it whole first would let one request exhaust the container's memory.
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw += chunk
+            if len(raw) > MAX_BODY:
+                raise ApiError(413, "too-large")
         try:
-            return raw.decode("utf-8")
+            # utf-8-sig drops a byte-order mark, as the browser's File.text() does.
+            return raw.decode("utf-8-sig")
         except UnicodeDecodeError:
             raise ApiError(400, "json") from None
 

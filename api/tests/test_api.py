@@ -1,12 +1,14 @@
 """The HTTP layer through FastAPI's TestClient, against a real SQLite file."""
 
+import asyncio
 import json
+from collections.abc import MutableMapping
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
-from exercise_planner_api import auth
+from exercise_planner_api import auth, data
 from exercise_planner_api.app import create_app
 from exercise_planner_api.config import Config
 from exercise_planner_api.db import connect
@@ -95,6 +97,59 @@ def test_a_chunked_body_over_a_mebibyte_is_refused(client: TestClient) -> None:
         "/api/auth/login", content=chunks(), headers={"Content-Type": "application/json"}
     )
     assert (r.status_code, r.json()) == (413, {"error": "too-large"})
+
+
+def test_a_chunked_body_stops_being_read_at_the_limit(config: Config) -> None:
+    """Driven at the ASGI level: TestClient drains a streamed body before the app sees it."""
+    app = create_app(config, run_backups=False)
+    pulled = 0
+    sent: list[MutableMapping[str, Any]] = []
+
+    async def receive() -> dict[str, Any]:
+        nonlocal pulled
+        pulled += 1
+        return {"type": "http.request", "body": b"x" * 1024, "more_body": pulled < 64 * 1024}
+
+    async def send(message: MutableMapping[str, Any]) -> None:
+        sent.append(message)
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "https",
+        "path": "/api/auth/login",
+        "raw_path": b"/api/auth/login",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(b"origin", ORIGIN.encode()), (b"content-type", b"application/json")],
+        "client": ("127.0.0.1", 1),
+        "server": ("testserver", 443),
+    }
+    asyncio.run(app(scope, receive, send))
+    assert sent[0]["status"] == 413
+    assert pulled <= 1025  # stopped just past 1 MiB, not after all 64 MiB
+
+
+def test_deeply_nested_json_is_a_400(client: TestClient) -> None:
+    deep = "[" * 100_000 + "]" * 100_000
+    r = client.post("/api/auth/login", content=deep, headers={"Content-Type": "application/json"})
+    assert (r.status_code, r.json()) == (400, {"error": "json"})
+    assert r.headers["cache-control"] == "no-store"
+
+
+def test_a_busy_hasher_is_a_503(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    def busy(*_: object) -> bool:
+        raise auth.AuthError("busy", retry_after=1)
+
+    monkeypatch.setattr(auth, "verify_password", busy)
+    r = client.post("/api/auth/login", json={"username": "a", "password": PASSWORD})
+    assert (r.status_code, r.json(), r.headers["retry-after"]) == (
+        503,
+        {"error": "busy", "retryAfter": 1},
+        "1",
+    )
 
 
 def test_unknown_routes_and_methods(client: TestClient) -> None:
@@ -434,7 +489,43 @@ def test_import_rejects_bad_files_and_changes_nothing(
     sign_up(client, config)
     r = post_import(client, payload)
     assert (r.status_code, r.json()) == (400, {"error": code})
-    assert client.get("/api/state").json()["settings"] is None
+    empty: dict[str, dict[str, Any]] = {"plans": {}, "log": {}, "revs": {}}
+    assert client.get("/api/state").json() == {"exercise": empty, "diet": empty, "settings": None}
+
+
+def test_import_accepts_a_byte_order_mark(client: TestClient, config: Config) -> None:
+    sign_up(client, config)
+    body = "\ufeff" + json.dumps({"format": "exercise-planner-export", "version": 1})
+    r = client.post(
+        "/api/import", content=body.encode(), headers={"Content-Type": "application/json"}
+    )
+    assert r.json() == {"weeks": 0, "ticks": 0, "settings": False}
+
+
+def test_ticks_on_different_days_from_many_connections_all_land(
+    config: Config, client: TestClient
+) -> None:
+    """Seven writers, one per day, at once: a read-modify-write tick would lose some of them."""
+    import threading
+
+    sign_up(client, config)
+    uid = 1
+    conns = [connect(config.db_path) for _ in range(7)]
+    barrier = threading.Barrier(7)
+
+    def tick(day: int) -> None:
+        barrier.wait()
+        for _ in range(20):
+            data.set_tick(conns[day], uid, "exercise", WEEK, "pu", day, True)
+
+    threads = [threading.Thread(target=tick, args=(d,)) for d in range(7)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    for c in conns:
+        c.close()
+    assert client.get("/api/state").json()["exercise"]["log"] == {WEEK: {"pu": [True] * 7}}
 
 
 def test_import_rejects_invalid_utf8(client: TestClient, config: Config) -> None:
