@@ -56,8 +56,9 @@ on `http://localhost:8000`, with the API's data in the `api-data` volume. Mint a
 
 - `/api/*`: forwarded to `fitness-api:8000`, the API container, on the same Docker network. The
   upstream is a variable resolved through Docker's DNS (`resolver 127.0.0.11`), so nginx starts and
-  keeps serving the app while the API is down; `/api/` then answers 502, which the client treats as
-  offline. Bodies are capped at 1 MiB, as the API caps them. The API's own `Cache-Control` is
+  keeps serving the app while the API is down. `/api/` then answers 502, or 504 within 3 seconds
+  while nginx still holds the stopped container's address (`proxy_connect_timeout 3s`); the client
+  treats both as offline. Bodies are capped at 1 MiB, as the API caps them. The API's own `Cache-Control` is
   hidden and the server-level `no-store` sent instead, so each response carries exactly one.
 - `/assets/*`: hashed bundles with `Cache-Control: public, max-age=31536000, immutable`; a missing
   asset returns 404 rather than falling back.
@@ -104,7 +105,7 @@ whole path through nginx:
 
 - a user signs up from an `ep-admin` invite, writes a tick and reads it back;
 - a write from a foreign `Origin` gets 403;
-- with the API stopped, `/api/` answers 502 while nginx still serves the app.
+- with the API stopped, `/api/` answers 502 or 504 within seconds while nginx still serves the app.
 
 CI runs it on every pull request (the `compose` job in `docker.yml`); locally it takes about a
 minute and leaves nothing running.

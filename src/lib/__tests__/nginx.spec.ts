@@ -25,6 +25,8 @@ describe('nginx.conf', () => {
     expect(api).toContain('resolver 127.0.0.11 valid=10s ipv6=off;')
     expect(api).toContain('set $api http://fitness-api:8000;')
     expect(api).toContain('proxy_pass $api;')
+    // A stopped API's stale address times out rather than refusing; don't hold requests for 60 s.
+    expect(api).toContain('proxy_connect_timeout 3s;')
     expect(api).toContain('client_max_body_size 1m;')
     // The API's own Cache-Control is dropped so the server-level one is the only one sent.
     expect(api).toContain('proxy_hide_header Cache-Control;')

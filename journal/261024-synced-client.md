@@ -24,7 +24,7 @@ API container. W4 (the first-login import prompt) and W5 (the home-server deploy
 - **New components:** `LoginForm`, `PasswordForm`, `AuthCard` and `SyncStatus`, plus an Account
   row in Settings.
 - **`scripts/compose-smoke.sh`** runs both images behind nginx: sign-up, a write, a read, the
-  `Origin` check, and the API down giving 502 while the app is still served. CI runs it as the
+  `Origin` check, and the API down giving 502 or 504 within seconds while the app is still served. CI runs it as the
   `compose` job.
 
 ## 2. Decisions
@@ -93,6 +93,11 @@ tests, and one on security, the UI and the docs. Fixed:
 - **Accepted and documented** (`architecture.md` §7):
   - two tabs racing on the shared outbox within Chrome's cross-process copy delay;
   - a session that ends by itself keeps its cache.
+- **CI found a slow failure the local run hid.** Right after the API stops, nginx still holds its
+  address, and on Linux a connection to it times out instead of being refused: nginx waited its
+  default 60 seconds, then gave 504. On Docker Desktop it was refused at once. nginx now gives up
+  after 3 seconds (`proxy_connect_timeout`), and the smoke test accepts 502 or 504 but requires an
+  answer within 10 seconds.
 - **Left for W5:** while the API is stopped, Docker's DNS can pass the `fitness-api` lookup to the
   LAN's resolver. The production compose file should give web and the API a network of their own.
 

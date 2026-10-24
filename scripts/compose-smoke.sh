@@ -43,7 +43,10 @@ expect_status 403 -b "$JAR" -X PUT -H 'Origin: http://evil.example' -H 'Content-
 echo "sign-up, write, read and the origin check work through nginx"
 
 compose stop fitness-api >/dev/null
-expect_status 502 "$BASE/api/healthz"
+# 502 when the address is refused, 504 when nginx's cached address times out (3 s): the client
+# treats both as offline. Either way it must answer quickly, not after nginx's default 60 s.
+down=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$BASE/api/healthz")
+case "$down" in 502 | 504) ;; *) fail "expected 502 or 504 with the API down, got $down" ;; esac
 expect_status 200 "$BASE/"
-echo "with the API down, /api/ is 502 and nginx still serves the app"
+echo "with the API down, /api/ answers $down quickly and nginx still serves the app"
 echo "OK"
