@@ -28,8 +28,11 @@ import {
   writeKey,
   type Exercise,
   type Log,
+  type PlannerData,
+  type PortableSettings,
 } from '@/lib/storage'
 import * as tracker from '@/lib/tracker'
+import { mergeSettings, mergeTracked } from '@/lib/transfer'
 import type { Theme } from '@/lib/theme'
 import { copyPlan, planSource, type Plans } from '@/lib/plans'
 
@@ -223,6 +226,25 @@ export const usePlannerStore = defineStore('planner', () => {
     theme.value = next
   }
 
+  /** The accent and daily pick, or null while this browser has saved no settings at all. */
+  function savedSettings(): PortableSettings | null {
+    return readKey(SETTINGS_KEY) === null
+      ? null
+      : { accent: accent.value, dailyPick: dailyPick.value }
+  }
+
+  /** Merges an export in without deleting anything (`mergeTracked`, `mergeSettings`). */
+  function importData(exercise: PlannerData, incoming: PortableSettings | null): void {
+    const merged = mergeTracked({ plans: plans.value, log: log.value }, exercise)
+    plans.value = merged.plans
+    log.value = merged.log
+    const next = mergeSettings(savedSettings(), incoming)
+    if (next) {
+      accent.value = next.accent
+      dailyPick.value = next.dailyPick
+    }
+  }
+
   const save = () => writeKey(DATA_KEY, { plans: plans.value, log: log.value })
   watch([plans, log], save, { deep: true })
   // Save a migration from the legacy key straight away, so it runs only once.
@@ -272,5 +294,7 @@ export const usePlannerStore = defineStore('planner', () => {
     setAccent,
     changeDailyPick,
     setTheme,
+    savedSettings,
+    importData,
   }
 })

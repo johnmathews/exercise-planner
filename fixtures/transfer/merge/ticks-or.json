@@ -1,0 +1,36 @@
+{
+  "description": "Ticks are OR-ed per week, item and day: an import adds ticks and never clears one. Items and weeks only one side has are kept or added.",
+  "existing": {
+    "plans": {},
+    "log": {
+      "2026-10-19": {
+        "pu": [true, false, false, false, true, false, false],
+        "sq": [false, false, true, false, false, false, false]
+      },
+      "2026-10-05": { "pl": [false, false, false, false, false, true, false] }
+    }
+  },
+  "incoming": {
+    "plans": {},
+    "log": {
+      "2026-10-19": {
+        "pu": [false, true, false, false, true, false, false],
+        "be": [false, false, false, true, false, false, false]
+      },
+      "2026-10-12": { "pu": [true, true, false, false, false, false, false] }
+    }
+  },
+  "expected": {
+    "plans": {},
+    "log": {
+      "2026-10-19": {
+        "pu": [true, true, false, false, true, false, false],
+        "sq": [false, false, true, false, false, false, false],
+        "be": [false, false, false, true, false, false, false]
+      },
+      "2026-10-12": { "pu": [true, true, false, false, false, false, false] },
+      "2026-10-05": { "pl": [false, false, false, false, false, true, false] }
+    }
+  },
+  "summary": { "weeks": 0, "ticks": 4 }
+}

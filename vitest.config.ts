@@ -14,6 +14,8 @@ export default mergeConfig(
         include: ['src/**/*.{ts,vue}'],
         exclude: ['src/main.ts', 'src/**/__tests__/**'],
         reporter: ['text', 'html'],
+        // Floors at the level the suite holds; CI fails if coverage drops below them.
+        thresholds: { lines: 100, functions: 100, statements: 99, branches: 98 },
       },
     },
   }),

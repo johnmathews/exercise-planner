@@ -1,0 +1,5 @@
+{
+  "description": "Text that is not JSON is rejected.",
+  "inputText": "{\"format\": \"exercise-planner-export\",",
+  "expected": { "ok": false, "error": "json" }
+}

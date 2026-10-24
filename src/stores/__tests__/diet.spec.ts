@@ -128,3 +128,32 @@ describe('diet store', () => {
     expect(stored(DIET_KEY)).toMatchObject({ plans: { '2026-10-19': [{ id: 'z' }] } })
   })
 })
+
+describe('diet importData', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+    localStorage.clear()
+    setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('merges food plans and ticks under the diet key only', async () => {
+    const d = useDietStore()
+    d.importData({
+      plans: { '2026-10-19': [{ id: 'eggs', name: 'Eggs', target: 2 }] },
+      log: { '2026-10-19': { eggs: [true, false, false, false, false, false, false] } },
+    })
+    await nextTick()
+    expect(d.foods.map((f) => f.name)).toEqual(['Eggs'])
+    expect(d.isEaten('eggs', 0)).toBe(true)
+    expect(stored(DIET_KEY)).toEqual({
+      plans: { '2026-10-19': [{ id: 'eggs', name: 'Eggs', target: 2 }] },
+      log: { '2026-10-19': { eggs: [true, false, false, false, false, false, false] } },
+    })
+    expect(stored(DATA_KEY)).toBeNull()
+  })
+})

@@ -1,8 +1,17 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, useId } from 'vue'
+import { onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { usePlannerStore } from '@/stores/planner'
+import { useDietStore } from '@/stores/diet'
 import { ACCENTS, MAX_DAILY_PICK, MIN_DAILY_PICK } from '@/lib/storage'
 import { THEMES, type Theme } from '@/lib/theme'
+import {
+  buildExport,
+  downloadExport,
+  mergeSummary,
+  parseExport,
+  type ExportData,
+  type ParseError,
+} from '@/lib/transfer'
 import NumberStepper from '@/components/NumberStepper.vue'
 
 const ACCENT_NAMES: Record<string, string> = {
@@ -14,12 +23,90 @@ const ACCENT_NAMES: Record<string, string> = {
 
 const THEME_NAMES: Record<Theme, string> = { system: 'System', light: 'Light', dark: 'Dark' }
 
+const IMPORT_ERRORS: Record<ParseError | 'read', string> = {
+  json: 'That file isn’t valid JSON.',
+  format: 'That file isn’t an Exercise Planner export.',
+  version: 'That export comes from a newer version of the app.',
+  read: 'That file couldn’t be read.',
+}
+
 const store = usePlannerStore()
+const diet = useDietStore()
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
 const panelId = useId()
 const LABEL = 'text-[11px] font-semibold tracking-wider text-muted uppercase'
+
+const fileInput = ref<HTMLInputElement | null>(null)
+/** A parsed file waiting for "Import", with the summary the confirm step shows. */
+const pending = ref<{ data: ExportData; summary: string } | null>(null)
+const notice = ref<{ tone: 'error' | 'done'; text: string } | null>(null)
+
+// Each opening starts clean, rather than showing the last import's outcome.
+watch(open, () => {
+  pending.value = null
+  notice.value = null
+})
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+function exportData(): void {
+  downloadExport(
+    buildExport({
+      exercise: { plans: store.plans, log: store.log },
+      diet: { plans: diet.plans, log: diet.log },
+      settings: { accent: store.accent, dailyPick: store.dailyPick },
+    }),
+  )
+}
+
+async function onFile(ev: Event): Promise<void> {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  // Cleared so that choosing the same file again still fires `change`.
+  input.value = ''
+  if (!file) return
+  pending.value = null
+  notice.value = null
+  let text: string
+  try {
+    text = await file.text()
+  } catch {
+    notice.value = { tone: 'error', text: IMPORT_ERRORS.read }
+    return
+  }
+  const result = parseExport(text)
+  if (!result.ok) {
+    notice.value = { tone: 'error', text: IMPORT_ERRORS[result.error] }
+    return
+  }
+  const ex = mergeSummary({ plans: store.plans, log: store.log }, result.data.exercise)
+  const di = mergeSummary({ plans: diet.plans, log: diet.log }, result.data.diet)
+  // Exercise and food plans count separately: a week can gain either or both.
+  const plans = ex.weeks + di.weeks
+  const ticks = ex.ticks + di.ticks
+  const settings = result.data.settings !== null && store.savedSettings() === null
+  if (!plans && !ticks && !settings) {
+    notice.value = { tone: 'done', text: 'Nothing new: everything in that file is already here.' }
+    return
+  }
+  const extra = settings ? ', plus the accent and exercises per day' : ''
+  pending.value = {
+    data: result.data,
+    summary: `Adds ${plural(plans, 'weekly plan')} and ${plural(ticks, 'tick')}${extra}. Nothing already here changes.`,
+  }
+}
+
+function confirmImport(data: ExportData): void {
+  const { exercise, diet: food, settings } = data
+  store.importData(exercise, settings)
+  diet.importData(food)
+  pending.value = null
+  notice.value = { tone: 'done', text: 'Imported.' }
+}
 
 function onPointerDown(ev: PointerEvent): void {
   if (open.value && root.value && !root.value.contains(ev.target as Node)) open.value = false
@@ -110,6 +197,45 @@ onBeforeUnmount(() => {
           @change="store.changeDailyPick"
         />
       </div>
+      <div :class="LABEL" class="mt-1">Data</div>
+      <div class="flex gap-2">
+        <button type="button" class="btn flex-1 justify-center" @click="exportData">Export</button>
+        <button type="button" class="btn flex-1 justify-center" @click="fileInput?.click()">
+          Import…
+        </button>
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".json,application/json"
+          class="hidden"
+          aria-label="Export file to import"
+          data-testid="import-file"
+          @change="onFile"
+        />
+      </div>
+      <div v-if="pending" class="flex flex-col gap-2" role="group" aria-label="Confirm import">
+        <p class="text-sm text-fg" data-testid="import-summary">{{ pending.summary }}</p>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="btn flex-1 justify-center"
+            @click="confirmImport(pending.data)"
+          >
+            Import
+          </button>
+          <button type="button" class="btn flex-1 justify-center" @click="pending = null">
+            Cancel
+          </button>
+        </div>
+      </div>
+      <p
+        v-if="notice"
+        :role="notice.tone === 'error' ? 'alert' : 'status'"
+        :data-tone="notice.tone"
+        class="text-sm data-[tone=done]:text-muted data-[tone=error]:text-warn"
+      >
+        {{ notice.text }}
+      </p>
     </div>
   </div>
 </template>

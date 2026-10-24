@@ -12,9 +12,11 @@ import {
   parseDietData,
   readKey,
   writeKey,
+  type DietData,
   type Food,
   type Log,
 } from '@/lib/storage'
+import { mergeTracked } from '@/lib/transfer'
 import { copyPlan, planSource, type Plans } from '@/lib/plans'
 import * as tracker from '@/lib/tracker'
 
@@ -95,6 +97,13 @@ export const useDietStore = defineStore('diet', () => {
     log.value = fresh.log
   }
 
+  /** Merges an export's food plans and log in without deleting anything (`mergeTracked`). */
+  function importData(incoming: DietData): void {
+    const merged = mergeTracked({ plans: plans.value, log: log.value }, incoming)
+    plans.value = merged.plans
+    log.value = merged.log
+  }
+
   const save = () => writeKey(DIET_KEY, { plans: plans.value, log: log.value })
   watch([plans, log], save, { deep: true })
   if (readKey(DIET_KEY) === null && readKey(LEGACY_DIET_KEY) !== null) save()
@@ -116,5 +125,6 @@ export const useDietStore = defineStore('diet', () => {
     nextWeekHasPlan,
     copyToNextWeek,
     syncFromStorage,
+    importData,
   }
 })
