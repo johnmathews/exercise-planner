@@ -122,5 +122,22 @@ export const useSessionStore = defineStore('session', () => {
     return null
   }
 
-  return { status, user, expired, init, login, lookup, redeem, logout }
+  /**
+   * Another tab signed in or out (a `storage` event on the session key). Follow it at once, so
+   * this tab never keeps showing, or writing as, a user who is no longer the one signed in.
+   */
+  async function onStorage(key: string | null): Promise<void> {
+    if (key !== SESSION_KEY && key !== null) return
+    const remembered = savedUser()
+    if (remembered === user.value && status.value === 'signed-in') return
+    sync.stop()
+    planner.clear()
+    diet.clear()
+    user.value = null
+    expired.value = false
+    status.value = 'signed-out'
+    if (remembered) await init()
+  }
+
+  return { status, user, expired, init, login, lookup, redeem, logout, onStorage }
 })

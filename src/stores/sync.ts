@@ -59,6 +59,8 @@ type Snapshot = { exercise: Tracked; diet: Tracked; settings: PortableSettings }
 
 export const CONFLICT_NOTICE =
   'A plan was changed on another device, so this device now shows that version.'
+export const REFUSED_NOTICE =
+  'The server refused a change, so it was undone here. Reload to see what was saved.'
 const FIRST_RETRY = 5_000
 const MAX_RETRY = 60_000
 
@@ -70,6 +72,27 @@ function opKey(op: Op): string {
   if (op.kind === 'plan') return `plan/${op.section}/${op.week}`
   if (op.kind === 'tick') return `tick/${op.section}/${op.week}/${op.item}/${op.day}`
   return 'settings'
+}
+
+const WEEK_KEY = /^\d{4}-\d{2}-\d{2}$/
+
+/** An outbox entry this version can send; a damaged or foreign one is skipped, not stuck on. */
+function isQueued(v: unknown): v is Queued {
+  if (!isRecord(v) || typeof v.id !== 'string') return false
+  if (v.kind === 'settings') return true
+  const sectionOk = v.section === 'exercise' || v.section === 'diet'
+  const weekOk = typeof v.week === 'string' && WEEK_KEY.test(v.week)
+  if (v.kind === 'plan') return sectionOk && weekOk
+  return (
+    v.kind === 'tick' &&
+    sectionOk &&
+    weekOk &&
+    typeof v.item === 'string' &&
+    typeof v.done === 'boolean' &&
+    Number.isInteger(v.day) &&
+    (v.day as number) >= 0 &&
+    (v.day as number) <= 6
+  )
 }
 
 function newId(): string {
@@ -175,7 +198,7 @@ export const useSyncStore = defineStore('sync', () => {
 
   function readOutbox(): Queued[] {
     const ops = parseJson(readKey(outboxKey()))
-    return Array.isArray(ops) ? (ops as Queued[]) : []
+    return Array.isArray(ops) ? ops.filter(isQueued) : []
   }
 
   function writeOutbox(ops: Queued[]): void {
@@ -245,16 +268,27 @@ export const useSyncStore = defineStore('sync', () => {
     retryDelay = Math.min(retryDelay * 2, MAX_RETRY)
   }
 
-  /** `done` drops the operation; `again` sends it again now; `stop` ends the flush. */
-  async function send(op: Op): Promise<'done' | 'again' | 'stop'> {
+  /** A request on behalf of the signed-in user, which the API refuses for anyone else. */
+  function call<T>(method: 'GET' | 'PUT', path: string, body?: unknown) {
+    return request<T>(method, path, body, { 'X-Expected-User': user.value ?? '' })
+  }
+
+  /**
+   * `done` drops the operation; `again` sends it again now; `stop` ends the flush. A reply that
+   * arrives after `stop()` (sign-out, or another user) is ignored entirely.
+   */
+  async function send(op: Queued, gen: number): Promise<'done' | 'again' | 'stop'> {
     let error: ApiError
     if (op.kind === 'plan') {
       const { section, week } = op
-      const items = store(section).plans[week] ?? []
-      const res = await request<{ rev: number }>('PUT', `/plans/${section}/${week}`, {
-        items,
+      const plans = store(section).plans
+      // Gone from the stores (another tab's state, a damaged cache): sending [] would wipe it.
+      if (!(week in plans)) return 'done'
+      const res = await call<{ rev: number }>('PUT', `/plans/${section}/${week}`, {
+        items: plans[week],
         rev: revs[section][week] ?? 0,
       })
+      if (gen !== generation) return 'stop'
       if (res.ok) {
         revs[section][week] = res.data.rev
         return 'done'
@@ -278,18 +312,20 @@ export const useSyncStore = defineStore('sync', () => {
     } else if (op.kind === 'tick') {
       const { section, week, item, day, done } = op
       const path = `/ticks/${section}/${week}/${encodeURIComponent(item)}/${day}`
-      const res = await request('PUT', path, { done })
+      const res = await call('PUT', path, { done })
+      if (gen !== generation) return 'stop'
       if (res.ok) return 'done'
       error = res.error
     } else {
-      const res = await request('PUT', '/settings', {
+      const res = await call('PUT', '/settings', {
         accent: planner.accent,
         dailyPick: planner.dailyPick,
       })
+      if (gen !== generation) return 'stop'
       if (res.ok) return 'done'
       error = res.error
     }
-    if (error.kind === 'offline') {
+    if (error.kind === 'offline' || error.kind === 'server') {
       scheduleRetry()
       return 'stop'
     }
@@ -297,8 +333,11 @@ export const useSyncStore = defineStore('sync', () => {
       authLost?.()
       return 'stop'
     }
-    // Refused (an invalid write): retrying cannot help, so drop it rather than block the rest.
+    // Refused for good (an invalid write, a misconfigured origin): retrying cannot help, and
+    // keeping it would block every write behind it. Drop it, and say so: the next read will
+    // show the server's state without this change.
     console.warn('sync: dropped a refused write', op, error)
+    notice.value = REFUSED_NOTICE
     return 'done'
   }
 
@@ -311,7 +350,7 @@ export const useSyncStore = defineStore('sync', () => {
         const op = readOutbox()[0]
         if (!op || gen !== generation) break
         status.value = 'syncing'
-        const outcome = await send(op)
+        const outcome = await send(op, gen)
         if (gen !== generation || outcome === 'stop') return
         if (outcome === 'done') dequeue(op)
         retryDelay = FIRST_RETRY
@@ -333,11 +372,11 @@ export const useSyncStore = defineStore('sync', () => {
       await flush()
       if (gen !== generation || status.value === 'offline' || readOutbox().length) return
       const before = changes
-      const res = await request<unknown>('GET', '/state')
+      const res = await call<unknown>('GET', '/state')
       if (gen !== generation) return
       if (!res.ok) {
         if (res.error.kind === 'auth') authLost?.()
-        else if (res.error.kind === 'offline') scheduleRetry()
+        else if (res.error.kind === 'offline' || res.error.kind === 'server') scheduleRetry()
         return
       }
       status.value = 'idle'
@@ -373,6 +412,9 @@ export const useSyncStore = defineStore('sync', () => {
   /** Stop syncing; the cache and outbox stay, so signing in again carries on. */
   function stop(): void {
     generation++
+    // Replies to the old session are ignored; don't let its pending promises block the next one.
+    flushing = null
+    refreshing = null
     stopWatch?.()
     stopWatch = null
     clearTimeout(retryTimer)
@@ -398,8 +440,12 @@ export const useSyncStore = defineStore('sync', () => {
     if (key === cacheKey()) {
       capture() // queue this tab's own unsent change before the other tab's state replaces it
       const state = normaliseState(parseJson(readKey(cacheKey())))
-      // Its pending writes are in the shared outbox, so its state can count as the base.
-      if (state) adopt(state)
+      // Its pending writes are in the shared outbox, so its state can count as the base. It is
+      // newer than any read still in flight here, so that read must not overwrite it.
+      if (state) {
+        changes++
+        adopt(state)
+      }
     } else if (key === outboxKey()) {
       pending.value = readOutbox().length
     }

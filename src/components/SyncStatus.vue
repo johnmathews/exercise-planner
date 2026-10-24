@@ -21,11 +21,11 @@ const BAR = 'mt-4 flex items-center gap-3 rounded-lg border border-line bg-subtl
 </script>
 
 <template>
-  <div data-noprint>
+  <!-- One live region, always present, so a message appearing in it is announced. -->
+  <div data-noprint aria-live="polite">
     <div
       v-if="message"
       :class="BAR"
-      role="status"
       data-testid="sync-status"
       :data-state="sync.loaded ? sync.status : 'loading'"
     >
@@ -34,7 +34,7 @@ const BAR = 'mt-4 flex items-center gap-3 rounded-lg border border-line bg-subtl
         Retry
       </button>
     </div>
-    <div v-if="sync.notice" :class="BAR" role="status" data-testid="sync-notice">
+    <div v-if="sync.notice" :class="BAR" data-testid="sync-notice">
       <span class="flex-1">{{ sync.notice }}</span>
       <button type="button" class="btn" @click="sync.dismissNotice()">Dismiss</button>
     </div>

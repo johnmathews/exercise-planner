@@ -10,6 +10,8 @@ export type ApiError =
   | { kind: 'offline' }
   /** No session, or it ended (401 `auth`). */
   | { kind: 'auth' }
+  /** The server failed (a 5xx with no API error code): worth retrying later. */
+  | { kind: 'server'; status: number }
   /** A stale plan write; the body carries the server's `items` and `rev`. */
   | { kind: 'conflict'; body: { items: unknown; rev: number } }
   /** Any other refusal, with the API's error code (`error` when the reply was not the API's). */
@@ -18,6 +20,8 @@ export type ApiError =
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError }
 
 const OFFLINE: ApiError = { kind: 'offline' }
+/** A request with no answer by then counts as offline, so one dead connection can't stall sync. */
+export const TIMEOUT_MS = 15_000
 
 async function readJson(res: Response): Promise<Record<string, unknown> | null> {
   try {
@@ -32,17 +36,30 @@ export async function request<T = unknown>(
   method: 'GET' | 'POST' | 'PUT',
   path: string,
   body?: unknown,
+  headers: Record<string, string> = {},
 ): Promise<ApiResult<T>> {
   const init: RequestInit = { method, credentials: 'same-origin' }
   if (body !== undefined) {
-    init.headers = { 'Content-Type': 'application/json' }
+    headers = { ...headers, 'Content-Type': 'application/json' }
     init.body = JSON.stringify(body)
   }
+  if (Object.keys(headers).length) init.headers = headers
+  const abort = new AbortController()
+  init.signal = abort.signal
   let res: Response
+  const timer = setTimeout(() => abort.abort(), TIMEOUT_MS)
   try {
-    res = await fetch(`/api${path}`, init)
+    // The fetch rejects on a network error, or when the timer aborts it.
+    res = await Promise.race([
+      fetch(`/api${path}`, init),
+      new Promise<never>((_, reject) =>
+        abort.signal.addEventListener('abort', () => reject(new Error('timeout'))),
+      ),
+    ])
   } catch {
     return { ok: false, error: OFFLINE }
+  } finally {
+    clearTimeout(timer)
   }
   if (res.status === 204) return { ok: true, data: undefined as T }
   const json = await readJson(res)
@@ -58,6 +75,8 @@ export async function request<T = unknown>(
   if (res.status === 409 && json !== null) {
     return { ok: false, error: { kind: 'conflict', body: json as { items: unknown; rev: number } } }
   }
+  if (res.status >= 500 && code === null)
+    return { ok: false, error: { kind: 'server', status: res.status } }
   const error: ApiError = { kind: 'refused', status: res.status, code: code ?? 'error' }
   if (typeof json?.retryAfter === 'number') error.retryAfter = json.retryAfter
   return { ok: false, error }

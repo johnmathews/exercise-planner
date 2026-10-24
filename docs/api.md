@@ -46,6 +46,10 @@ startup inside a transaction.
 All paths start with `/api`. Bodies are JSON, and errors are `{"error": "<code>"}`. Every response
 carries `Cache-Control: no-store`.
 
+**`X-Expected-User`.** A data request may name the user it expects; if the session belongs to anyone
+else, it gets 401 `auth`. The client sends it on every read and write, so a tab left open as one
+person can never touch the data of someone who signed in later in another tab.
+
 **Writes** (`POST`, `PUT`) must send `Content-Type: application/json` and an `Origin` header equal
 to `PUBLIC_ORIGIN`; otherwise they get 403 `origin` or 415 `content-type`. `SameSite=Lax` alone
 would not stop a request from another `*.itsa-pizza.com` host, because the browser counts it as

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useSessionStore, type AuthProblem } from '@/stores/session'
 import { describeProblem } from '@/lib/problems'
 import AuthCard from '@/components/AuthCard.vue'
@@ -9,6 +9,7 @@ const username = ref(session.user ?? '')
 const password = ref('')
 const busy = ref(false)
 const problem = ref<AuthProblem | null>(null)
+const passwordInput = ref<HTMLInputElement | null>(null)
 const LABEL = 'mb-1 block text-sm font-medium'
 
 const intro = computed(() =>
@@ -16,13 +17,21 @@ const intro = computed(() =>
     ? 'Your session has ended. Sign in again to keep syncing; changes made on this device are kept.'
     : 'Sign in to see your plans and log on any device.',
 )
+const wrong = computed(() => problem.value?.code === 'invalid')
 
 async function submit(): Promise<void> {
   if (busy.value) return
   busy.value = true
   problem.value = await session.login(username.value.trim(), password.value)
   busy.value = false
-  if (!problem.value) password.value = ''
+  if (!problem.value) {
+    password.value = ''
+    return
+  }
+  // Back to the password, ready for another try; the error is announced by its role.
+  await nextTick()
+  passwordInput.value?.focus()
+  passwordInput.value?.select()
 }
 </script>
 
@@ -40,23 +49,36 @@ async function submit(): Promise<void> {
           autocapitalize="none"
           spellcheck="false"
           required
+          :aria-invalid="wrong"
+          :aria-describedby="problem ? 'login-problem' : undefined"
         />
       </div>
       <div>
         <label for="login-password" :class="LABEL">Password</label>
         <input
           id="login-password"
+          ref="passwordInput"
           v-model="password"
           class="field w-full"
           type="password"
           autocomplete="current-password"
           required
+          :aria-invalid="wrong"
+          :aria-describedby="problem ? 'login-problem' : undefined"
         />
       </div>
-      <p v-if="problem" role="alert" class="text-sm text-warn" data-testid="login-problem">
+      <p
+        v-if="problem"
+        id="login-problem"
+        role="alert"
+        class="text-sm text-warn"
+        data-testid="login-problem"
+      >
         {{ describeProblem(problem) }}
       </p>
-      <button type="submit" class="btn-primary justify-center" :aria-busy="busy">Sign in</button>
+      <button type="submit" class="btn-primary justify-center" :aria-busy="busy">
+        {{ busy ? 'Signing in…' : 'Sign in' }}
+      </button>
     </form>
     <p class="mt-5 text-xs text-faint">Accounts are by invitation.</p>
   </AuthCard>

@@ -146,6 +146,11 @@ def create_app(config: Config, run_backups: bool = True) -> FastAPI:
         user = auth.session_user(conn, config, token) if token else None
         if user is None:
             raise ApiError(401, "auth")
+        # A tab still showing one user sends their name; if the cookie now belongs to someone
+        # else (they signed out and another person signed in), refuse rather than mix accounts.
+        expected = request.headers.get("x-expected-user")
+        if expected is not None and expected.casefold() != user.username.casefold():
+            raise ApiError(401, "auth")
         if user.refreshed:
             set_session_cookie(response, token or "")
         return user

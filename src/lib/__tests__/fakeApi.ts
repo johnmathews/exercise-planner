@@ -36,7 +36,7 @@ export class FakeApi {
   signedIn: string | null = null
   links = new Map<string, { kind: 'invite' | 'reset'; username: string }>()
   offline = false
-  calls: { method: string; path: string; body: unknown }[] = []
+  calls: { method: string; path: string; body: unknown; expectedUser?: string }[] = []
   private failures: { method: string; path: string; status: number; body?: unknown }[] = []
   private held: (() => void)[] | null = null
   private stalled: { method: string; path: string }[] = []
@@ -100,7 +100,9 @@ export class FakeApi {
     const method = init.method ?? 'GET'
     const path = String(input).replace(/^\/api/, '')
     const body: unknown = typeof init.body === 'string' ? JSON.parse(init.body) : undefined
-    this.calls.push({ method, path, body })
+    const headers = new Headers(init.headers)
+    const expectedUser = headers.get('X-Expected-User') ?? undefined
+    this.calls.push({ method, path, body, expectedUser })
     if (this.stalled.some((s) => s.method === method && path.startsWith(s.path))) {
       return new Promise<Response>(() => {})
     }
@@ -108,7 +110,7 @@ export class FakeApi {
     if (delay >= 0) {
       const [d] = this.delayed.splice(delay, 1)
       // Answer with the state as it was when the request arrived, as a slow reply would.
-      const reply = this.route(method, path, body as Record<string, unknown>)
+      const reply = this.route(method, path, body as Record<string, unknown>, expectedUser)
       await d!.until
       return reply
     }
@@ -121,10 +123,15 @@ export class FakeApi {
         ? new Response('<html>Bad Gateway</html>', { status: f!.status })
         : Response.json(f!.body, { status: f!.status })
     }
-    return this.route(method, path, body as Record<string, unknown>)
+    return this.route(method, path, body as Record<string, unknown>, expectedUser)
   }
 
-  private route(method: string, path: string, body: Record<string, unknown>): Response {
+  private route(
+    method: string,
+    path: string,
+    body: Record<string, unknown>,
+    expectedUser?: string,
+  ): Response {
     const error = (status: number, code: string, extra: object = {}) =>
       Response.json({ error: code, ...extra }, { status })
     if (method === 'POST' && path === '/auth/login') {
@@ -148,14 +155,18 @@ export class FakeApi {
       this.signedIn = link.username
       return Response.json({ username: link.username })
     }
-    const user = this.signedIn
-    const a = user ? this.accounts.get(user) : undefined
-    if (!a) return error(401, 'auth')
-    if (method === 'GET' && path === '/auth/me') return Response.json({ username: user })
     if (method === 'POST' && path === '/auth/logout') {
       this.signedIn = null
       return new Response(null, { status: 204 })
     }
+    const user = this.signedIn
+    const a = user ? this.accounts.get(user) : undefined
+    if (!a) return error(401, 'auth')
+    // As the API does: a tab expecting another user must not see or change this one's data.
+    if (expectedUser !== undefined && expectedUser.toLowerCase() !== user!.toLowerCase()) {
+      return error(401, 'auth')
+    }
+    if (method === 'GET' && path === '/auth/me') return Response.json({ username: user })
     if (method === 'GET' && path === '/state') return Response.json(this.state(user!))
     if (method === 'PUT' && path === '/settings') {
       a.settings = { accent: String(body.accent), dailyPick: Number(body.dailyPick) }

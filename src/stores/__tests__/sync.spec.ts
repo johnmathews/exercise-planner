@@ -8,6 +8,7 @@ import {
   CACHE_PREFIX,
   CONFLICT_NOTICE,
   OUTBOX_PREFIX,
+  REFUSED_NOTICE,
   diff,
   normaliseState,
   useSyncStore,
@@ -361,7 +362,7 @@ describe('sync', () => {
     await settle()
     expect(planner.exercises).toEqual([SQUATS])
     expect(api.paths('PUT')).toEqual([])
-    localStorage.setItem(OUTBOX_PREFIX + USER, JSON.stringify([{ kind: 'settings' }]))
+    localStorage.setItem(OUTBOX_PREFIX + USER, JSON.stringify([{ kind: 'settings', id: 'a' }]))
     sync.onStorage(OUTBOX_PREFIX + USER)
     expect(sync.pending).toBe(1)
     sync.onStorage('something-else')
@@ -394,6 +395,142 @@ describe('sync', () => {
     expect(localStorage.getItem(DATA_KEY)).toBeNull()
     expect(localStorage.getItem(DIET_KEY)).toBeNull()
     expect(localStorage.getItem(LEGACY_DATA_KEY)).toBe('{"exercises":[]}')
+  })
+})
+
+describe('sync, after review', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+    localStorage.clear()
+    setActivePinia(createPinia())
+    api = new FakeApi()
+    api.addUser(USER)
+    api.addUser('bob')
+    api.signedIn = USER
+    vi.stubGlobal('fetch', api.fetch)
+    lost = vi.fn<() => void>()
+  })
+
+  afterEach(() => {
+    useSyncStore().stop()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('names the expected user on every read and write', async () => {
+    const { planner } = await start(emptyState())
+    planner.toggle('sq', 0)
+    await settle()
+    const synced = api.calls.filter((c) => c.path.startsWith('/state') || c.method === 'PUT')
+    expect(synced.length).toBeGreaterThan(2)
+    expect(synced.every((c) => c.expectedUser === USER)).toBe(true)
+  })
+
+  it('never writes into the account of someone who signed in in another tab', async () => {
+    const { planner } = await start(emptyState())
+    api.signedIn = 'bob' // alice signed out elsewhere and bob signed in: the cookie is his
+    planner.toggle('sq', 0)
+    await settle()
+    expect(lost).toHaveBeenCalled()
+    expect(api.accounts.get('bob')!.plans.exercise).toEqual({})
+    expect(api.accounts.get('bob')!.ticks.exercise).toEqual({})
+  })
+
+  it('keeps and retries a write the server failed', async () => {
+    const { sync, planner } = await start(emptyState())
+    api.failNext('PUT', '/plans', 500)
+    planner.toggle('sq', 0)
+    await settle()
+    expect(sync.pending).toBe(2)
+    expect(sync.status).toBe('offline')
+    await sync.flush()
+    expect(sync.pending).toBe(0)
+    expect(api.accounts.get(USER)!.ticks.exercise[WEEK]).toEqual({ sq: 1 })
+  })
+
+  it('says so when it drops a write the server refused for good', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { sync, planner } = await start(emptyState())
+    api.failNext('PUT', '/ticks', 403, { error: 'origin' })
+    planner.toggle('sq', 0)
+    await settle()
+    expect(sync.pending).toBe(0)
+    expect(sync.notice).toBe(REFUSED_NOTICE)
+  })
+
+  it('gives up on a request that never answers, and tries again', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+    vi.setSystemTime(NOW)
+    const { sync, planner } = await start(emptyState())
+    api.stall('PUT', '/plans')
+    planner.toggle('sq', 0)
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(sync.status).toBe('offline')
+    expect(sync.pending).toBe(2)
+  })
+
+  it('lets replies to the last user’s writes touch nothing of the next user’s', async () => {
+    const { sync, planner } = await start(stateWith({ [WEEK]: [PUSHUPS] }, { [WEEK]: 1 }))
+    api.accounts.get(USER)!.plans.exercise[WEEK] = { items: [SQUATS], rev: 5 }
+    const release = api.hold()
+    planner.changeTarget('pu', 1) // alice: will get a 409 carrying her server copy
+    planner.toggle('sq', 0) //       alice: will get a 401 once bob holds the cookie
+    await nextTick()
+    sync.stop()
+    api.signedIn = 'bob'
+    const bobLost = vi.fn<() => void>()
+    sync.start('bob', bobLost)
+    release()
+    await flushPromises()
+    expect(sync.notice).toBeNull()
+    expect(bobLost).not.toHaveBeenCalled()
+    expect(lost).not.toHaveBeenCalled()
+    expect(sync.status).toBe('idle')
+    expect(usePlannerStore().plans).toEqual({})
+    expect(sync.loaded).toBe(true)
+  })
+
+  it('treats another tab’s state as newer than a read already in flight', async () => {
+    const { sync, planner } = await start(emptyState())
+    const release = api.holdNext('GET', '/state')
+    const read = sync.refresh()
+    await flushPromises()
+    const other = emptyState()
+    other.exercise.log = { [WEEK]: { sq: [true, false, false, false, false, false, false] } }
+    localStorage.setItem(CACHE_PREFIX + USER, JSON.stringify(other))
+    sync.onStorage(CACHE_PREFIX + USER)
+    release()
+    await read
+    expect(planner.isDone('sq', 0)).toBe(true)
+  })
+
+  it('skips damaged outbox entries rather than sticking on them', async () => {
+    localStorage.setItem(
+      OUTBOX_PREFIX + USER,
+      JSON.stringify([
+        null,
+        { kind: 'plan', section: 'nope', week: WEEK },
+        { kind: 'settings', id: 'a' },
+      ]),
+    )
+    const { sync } = await start(emptyState())
+    await settle()
+    expect(sync.pending).toBe(0)
+    expect(api.paths('PUT')).toEqual(['PUT /settings'])
+  })
+
+  it('drops a plan write for a week the stores no longer hold', async () => {
+    localStorage.setItem(
+      OUTBOX_PREFIX + USER,
+      JSON.stringify([{ kind: 'plan', section: 'exercise', week: '2026-01-05', id: 'a' }]),
+    )
+    const { sync } = await start(emptyState())
+    await settle()
+    expect(sync.pending).toBe(0)
+    expect(api.paths('PUT')).toEqual([])
   })
 })
 

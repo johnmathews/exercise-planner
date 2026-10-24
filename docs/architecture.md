@@ -122,18 +122,18 @@ with storage blocked or full the app keeps working in memory.
 | `exercise-planner-v2`, `-diet-v2`   | exercise and food `{ plans, log }` from before accounts      | never   |
 | `exercise-planner-v1`, `-diet-v1`   | the single-list format from before weekly plans              | never   |
 
-Since accounts, the keys from before them are only read: they hold what a browser recorded locally,
-for the first-login import. Their parsing, migration and validation below are unchanged. Browsers
-isolate storage per origin, so a cache belongs to one origin and one user.
+Since accounts, nothing writes the keys from before them. They stay because they hold what a browser
+recorded locally, which the first-login import (W4) reads with the parsing, migration and validation
+below. Signing out does not remove them. Browsers isolate storage per origin, so a cache belongs to
+one origin and one user.
 
 **Migration.** Before weekly plans, one list served every week: `{ exercises, log }` under
 `exercise-planner-v1` (the design prototype's key and shape) and `{ foods, log }` under
-`exercise-planner-diet-v1`. When a v2 key is missing and its v1 key exists, the store converts it:
-the list becomes the plan for every week in the log and for the current week, so every week looks as
-it did, and the result is saved as v2 at once. The v1 keys are never written or deleted. A v2 value
-that is not a JSON object also falls back to migrating v1 (or to the defaults without one); that
-result is saved on the next change. A tab still running the pre-v2 app keeps writing v1, which the
-new app no longer reads once v2 exists, so reload open tabs after updating.
+`exercise-planner-diet-v1`. When a v2 key is missing and its v1 key exists, `parsePlannerData` and
+`parseDietData` convert it: the list becomes the plan for every week in the log and for the current
+week, so every week looks as it did. A v2 value that is not a JSON object also falls back to
+migrating v1 (or to nothing without one). Before accounts, the stores saved the converted result as
+v2; now the conversion only feeds the import.
 
 `parsePlannerData` (`src/lib/storage.ts`) validates field by field:
 
@@ -178,10 +178,10 @@ An import **merges and never deletes** (`mergeTracked`, `mergeSettings`):
 
 - A week that already has a plan keeps it; a week with no plan takes the file's.
 - Ticks are OR-ed per week, item and day, so an import can add ticks but never clears one.
-- The file's accent and daily pick apply only when this browser has no saved settings yet: none
-  were stored when the app loaded, and none have been changed or imported since. Tracking this in
-  the store rather than re-reading the key keeps it right when storage is blocked. An import that
-  applies settings saves them, so a second import does not offer them again.
+- The file's accent and daily pick apply only when the user has no settings of their own yet: none
+  on the server, and none changed or imported since. The planner tracks this in `savedSettings`
+  rather than reading any key, so it holds when storage is blocked, and an import that applies
+  settings counts as saving them, so a second import does not offer them again.
 
 Signed in, an import merges into the stores like any other change, and the sync store sends what
 it added: a plan write per new week and a tick write per new tick. The confirm step names how many
@@ -227,9 +227,10 @@ import and export as well, so the API's tests will run the same files.
 - **Today refreshes.** A one-minute tick and `visibilitychange` both call `refreshNow`, which
   updates `now` only when the date has changed. A tab left open past midnight moves its highlighted
   column within a minute.
-- **Export and import live in Settings.** Data is per browser, so the export file is the way to
-  back it up or move it to another origin (the dev server's data has no other way out). Import is
-  additive by design: restoring an old backup over newer data cannot lose the newer data.
+- **Export and import live in Settings.** Before accounts, data lived in one browser and the export
+  file was the only way to move it or back it up. It is still each person's own copy of their data.
+  Import is additive by design: restoring an old backup over newer data cannot lose the newer
+  data.
 - **Tabs stay in sync** through `storage` events on the user's cache key: a tab adopts another tab's
   state instead of overwriting it, and their writes share one outbox (§7). The plan had proposed a
   `BroadcastChannel`; the cache already lives in `localStorage`, whose events carry the same news
@@ -269,9 +270,18 @@ their templates and have no `<style>` blocks. Everything global is in `src/style
 confirms it. A 401 asks them to sign in again, keeping unsent writes; being offline keeps them
 working from the cache. With nobody remembered the app waits for the server, then shows the
 sign-in form. Invite and reset links arrive as `#/invite/<token>` and `#/reset/<token>`. The token
-goes to the API in request bodies only, and the fragment is cleared once used. Signing out ends the
-server session, then deletes the user's cache and outbox from the device. It is refused while
-offline: the cookie is HttpOnly, so only the server can end it.
+goes to the API in request bodies only, and the fragment is cleared once the link is used or turns
+out to be invalid; offline or busy, the page offers to try again. Signing out ends the server
+session, then deletes the user's cache and outbox from the device. It is refused while offline: the
+cookie is HttpOnly, so only the server can end it.
+
+**One user per tab, always.** Every read and write sends `X-Expected-User` with the user the tab
+shows, and the API refuses any other with 401 (`api.md` §3). A tab left open as one person can then
+never read or write the account of someone who signed in afterwards in another tab: the cookie is
+shared, the name is not. The session store also follows `storage` events on the session key, so
+when another tab signs out or in as someone else, this tab stops syncing, clears the stores, and
+follows. Every request gives up after 15 seconds and counts as offline, so one dead connection
+cannot stall syncing; replies that arrive after a sign-out or a user switch are ignored.
 
 **Writes.** The stores change state at once. A deep watcher in the sync store diffs their state
 against `base`, the state the server is known to hold, and turns each difference into an operation
@@ -286,14 +296,14 @@ the reply to one already in flight removes only that one. Plan and settings oper
 values when sent, so the server always gets the latest. Operations go out one at a time, in order.
 A tick on a week with no plan of its own creates the plan first, as on the device.
 
-| Reply                    | What happens                                                                           |
-| ------------------------ | -------------------------------------------------------------------------------------- |
-| success                  | dequeued; a plan's new revision is stored                                              |
-| 409 with the server copy | that week shows the server's plan, with a notice                                       |
-| 409 with no server plan  | sent again as a create                                                                 |
-| offline, 502, 503, 504   | kept; retried after 5 s, doubling to 60 s, and at once when the browser is back online |
-| 401                      | kept; the sign-in form appears, and sending resumes after signing in                   |
-| any other refusal        | dropped with a console warning, so one bad write cannot block the rest                 |
+| Reply                                               | What happens                                                                           |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| success                                             | dequeued; a plan's new revision is stored                                              |
+| 409 with the server copy                            | that week shows the server's plan, with a notice                                       |
+| 409 with no server plan                             | sent again as a create                                                                 |
+| offline, a timeout, or a 5xx with no API error code | kept; retried after 5 s, doubling to 60 s, and at once when the browser is back online |
+| 401                                                 | kept; the sign-in form appears, and sending resumes after signing in                   |
+| any other refusal                                   | dropped, so one bad write cannot block the rest, with a notice that it was undone      |
 
 Two devices creating the same week from the same carried plan send identical items, which the API
 accepts without a conflict (P7), so the common case raises no notice.
@@ -308,8 +318,22 @@ an edit that has not reached the server.
 **The cache** holds the last state the stores showed, with each plan's revision, so a reload or a
 cold start offline shows data at once. It is written on every change and every read. Another tab's
 write to it arrives as a `storage` event, and this tab adopts it as both its state and its `base`:
-that tab's own writes are already in the shared outbox. The cache and outbox are validated with the
-storage normalisers when read, so a damaged key cannot break the app.
+that tab's own writes are already in the shared outbox. Adopting it also counts as a local change,
+so a read this tab already had in flight cannot overwrite it. The cache is validated with the
+storage normalisers when read, and outbox entries one by one, so a damaged key cannot break the app
+or stick the outbox. A plan write for a week the stores no longer hold is dropped rather than sent
+as an empty plan.
 
 `SyncStatus` shows "Loading your data…" before the first state arrives. Offline, it shows a retry
-button and how many changes are waiting. A conflict notice stays until dismissed.
+button and how many changes are waiting. Conflict and refused-write notices stay until dismissed.
+It sits in a live region that is always present, so screen readers announce each message.
+
+**Accepted limits.**
+
+- Tabs share one outbox through `localStorage`, which Chrome copies between tab processes
+  asynchronously. Two tabs of one user editing within that delay can each rewrite the outbox from
+  a stale copy and lose the other's queued write. Duplicate sends are harmless (ticks carry their
+  value, identical plans are accepted); this narrower case would need one outbox per tab.
+- When a session ends by itself (expiry, a reset elsewhere), the device keeps that user's cache and
+  outbox so unsent changes survive, and the sign-in form offers their username. Only signing out
+  on purpose clears the device.

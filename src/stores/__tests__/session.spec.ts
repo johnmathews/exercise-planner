@@ -51,7 +51,7 @@ describe('session', () => {
   it('asks to sign in again when the remembered session has ended, keeping unsent changes', async () => {
     api = signedIn()
     api.signedIn = null
-    localStorage.setItem(OUTBOX_PREFIX + USER, JSON.stringify([{ kind: 'settings' }]))
+    localStorage.setItem(OUTBOX_PREFIX + USER, JSON.stringify([{ kind: 'settings', id: 'a' }]))
     const session = useSessionStore()
     await session.init()
     expect(session.status).toBe('signed-out')
@@ -154,6 +154,38 @@ describe('session', () => {
     expect(session.user).toBe('bob')
     expect(await session.lookup('tok')).toEqual({ code: 'gone' })
     expect(await session.redeem('tok', PASSWORD)).toEqual({ code: 'gone' })
+  })
+
+  it('follows another tab signing out', async () => {
+    api = signedIn()
+    const session = useSessionStore()
+    await session.init()
+    await flushPromises()
+    usePlannerStore().toggle('pu', 0)
+    localStorage.removeItem(SESSION_KEY)
+    api.signedIn = null
+    await session.onStorage(SESSION_KEY)
+    expect(session.status).toBe('signed-out')
+    expect(session.expired).toBe(false)
+    expect(usePlannerStore().grandTotal).toBe(0)
+    expect(useSyncStore().user).toBeNull()
+  })
+
+  it('follows another tab signing in as someone else', async () => {
+    api = signedIn()
+    api.addUser('bob')
+    const session = useSessionStore()
+    await session.init()
+    await flushPromises()
+    usePlannerStore().toggle('pu', 0)
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ user: 'bob' }))
+    api.signedIn = 'bob'
+    await session.onStorage(SESSION_KEY)
+    expect(session.user).toBe('bob')
+    expect(useSyncStore().user).toBe('bob')
+    expect(usePlannerStore().grandTotal).toBe(0)
+    await session.onStorage('unrelated')
+    expect(session.user).toBe('bob')
   })
 
   it('signs out, forgetting the user’s data on the device', async () => {

@@ -92,6 +92,16 @@ describe('signing in', () => {
     expect(heading()).toBe('Sign in')
   })
 
+  it('marks the fields and returns to the password after a wrong password', async () => {
+    api = signedOut()
+    mountApp()
+    await flushPromises()
+    await signIn(USER, 'not the password')
+    expect(wrapper.get('#login-password').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.get('#login-username').attributes('aria-describedby')).toBe('login-problem')
+    expect(document.activeElement).toBe(wrapper.get('#login-password').element)
+  })
+
   it('explains being offline', async () => {
     api = signedOut()
     mountApp()
@@ -123,6 +133,7 @@ describe('signing in', () => {
     await wrapper.get('form').trigger('submit')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.get('button[type="submit"]').attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('button[type="submit"]').text()).toBe('Signing in…')
     release()
     await flushPromises()
     expect(api.paths('POST /auth/login')).toHaveLength(1)
@@ -174,7 +185,7 @@ describe('invite and reset links', () => {
     expect(wrapper.text()).toContain('This signs you out on every other device.')
   })
 
-  it('says when a link is no good', async () => {
+  it('says when a link is no good, and takes its token out of the address bar', async () => {
     api = signedOut()
     history.replaceState(null, '', '/#/invite/used')
     mountApp()
@@ -184,6 +195,67 @@ describe('invite and reset links', () => {
     expect(wrapper.get('[role="alert"]').text()).toBe(
       'This link has expired or was already used. Ask for a new one.',
     )
+    expect(location.hash).toBe('')
+    expect(wrapper.find('button').exists()).toBe(false)
+  })
+
+  it('offers to try again when the link could not be checked', async () => {
+    api = signedOut()
+    api.links.set('tok_4', { kind: 'invite', username: 'dave' })
+    api.offline = true
+    history.replaceState(null, '', '/#/invite/tok_4')
+    mountApp()
+    await flushPromises()
+    expect(heading()).toBe('Couldn’t check the link')
+    expect(location.hash).toBe('#/invite/tok_4') // it may still be good
+    api.offline = false
+    await button('Try again').trigger('click')
+    await flushPromises()
+    expect(heading()).toBe('Welcome, dave')
+  })
+
+  it('clears the token once a redeem finds the link already used', async () => {
+    api = signedOut()
+    api.links.set('tok_5', { kind: 'invite', username: 'erin' })
+    history.replaceState(null, '', '/#/invite/tok_5')
+    mountApp()
+    await flushPromises()
+    api.links.delete('tok_5') // used in another tab meanwhile
+    await wrapper.get('#new-password').setValue('a long new password')
+    await wrapper.get('#confirm-password').setValue('a long new password')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="link-problem"]').text()).toContain('expired')
+    expect(location.hash).toBe('')
+  })
+
+  it('starts afresh when a second link arrives in the same tab', async () => {
+    api = signedOut()
+    api.links.set('tok_6', { kind: 'invite', username: 'fay' })
+    api.links.set('tok_7', { kind: 'reset', username: USER })
+    history.replaceState(null, '', '/#/invite/tok_6')
+    mountApp()
+    await flushPromises()
+    expect(heading()).toBe('Welcome, fay')
+    history.replaceState(null, '', '/#/reset/tok_7')
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    await flushPromises()
+    expect(heading()).toBe('Choose a new password')
+    expect(wrapper.text()).toContain(USER)
+  })
+
+  it('puts focus back on the repeat field when the passwords differ', async () => {
+    api = signedOut()
+    api.links.set('tok_8', { kind: 'invite', username: 'gus' })
+    history.replaceState(null, '', '/#/invite/tok_8')
+    mountApp()
+    await flushPromises()
+    await wrapper.get('#new-password').setValue('a long new password')
+    await wrapper.get('#confirm-password').setValue('other')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(document.activeElement).toBe(wrapper.get('#confirm-password').element)
+    expect(wrapper.get('#confirm-password').attributes('aria-invalid')).toBe('true')
   })
 
   it('opens a link pasted into a running tab', async () => {
@@ -245,7 +317,7 @@ describe('signing out', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     await button('Sign out').trigger('click')
     await flushPromises()
-    expect(confirm).toHaveBeenCalledWith('1 change haven’t synced yet. Sign out anyway?')
+    expect(confirm).toHaveBeenCalledWith('1 change hasn’t synced yet. Sign out anyway?')
     expect(heading()).toBe('Sign in')
   })
 
@@ -257,10 +329,39 @@ describe('signing out', () => {
     await openSettings()
     await button('Sign out').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[role="alert"]').text()).toBe(
+    expect(wrapper.get('[data-testid="sign-out-problem"]').text()).toBe(
       'Can’t reach the server. Check the connection and try again.',
     )
+    expect(wrapper.get('[data-testid="sign-out-problem"]').attributes('role')).toBe('alert')
     expect(wrapper.find('[aria-label="Week navigation"]').exists()).toBe(true)
+  })
+})
+
+describe('other tabs', () => {
+  it('follows another tab signing out, and another signing in as someone else', async () => {
+    api = signedIn()
+    api.addUser('bob')
+    mountApp()
+    await flushPromises()
+    localStorage.removeItem(SESSION_KEY)
+    api.signedIn = null
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: SESSION_KEY, storageArea: localStorage }),
+    )
+    await flushPromises()
+    expect(heading()).toBe('Sign in')
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ user: 'bob' }))
+    api.signedIn = 'bob'
+    window.dispatchEvent(
+      new StorageEvent('storage', { key: SESSION_KEY, storageArea: localStorage }),
+    )
+    await flushPromises()
+    expect(heading()).toBe('Oct 19 – Oct 25, 2026')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().endsWith('Settings'))!
+      .trigger('click')
+    expect(wrapper.get('[data-testid="signed-in-as"]').text()).toBe('Signed in as bob')
   })
 })
 

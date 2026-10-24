@@ -35,8 +35,7 @@
   copy and keeps working offline, sending changes once the connection is back.
 - **Export and import.** Settings → **Export** downloads your plans, ticks, accent and daily pick
   as a JSON file; **Import…** merges such a file in. An import only adds: weeks you already have
-  keep their plan, and no tick is ever cleared. Data lives in one browser, so export is also the
-  backup.
+  keep their plan, and no tick is ever cleared. The export is each person's own copy of their data.
 
 ## 2. Getting started
 

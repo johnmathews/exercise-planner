@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { request } from '@/lib/api'
+import { TIMEOUT_MS, request } from '@/lib/api'
 
 function respond(status: number, body?: unknown, raw?: string): void {
   vi.stubGlobal(
@@ -35,7 +35,11 @@ describe('request', () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ ok: true }))
     vi.stubGlobal('fetch', fetch)
     await request('GET', '/healthz')
-    expect(fetch.mock.calls[0]![1]).toEqual({ method: 'GET', credentials: 'same-origin' })
+    expect(fetch.mock.calls[0]![1]).toEqual({
+      method: 'GET',
+      credentials: 'same-origin',
+      signal: expect.any(AbortSignal),
+    })
   })
 
   it('returns undefined data for 204', async () => {
@@ -104,11 +108,35 @@ describe('request', () => {
     })
   })
 
-  it('calls an unexpected reply an error', async () => {
+  it('calls a 5xx with no API code a server failure, to be retried', async () => {
     respond(500, undefined, 'Internal Server Error')
     expect(await request('GET', '/state')).toEqual({
       ok: false,
-      error: { kind: 'refused', status: 500, code: 'error' },
+      error: { kind: 'server', status: 500 },
     })
+  })
+
+  it('sends extra headers alongside the content type', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ rev: 1 }))
+    vi.stubGlobal('fetch', fetch)
+    await request('PUT', '/settings', {}, { 'X-Expected-User': 'alice' })
+    expect(fetch.mock.calls[0]![1]!.headers).toEqual({
+      'X-Expected-User': 'alice',
+      'Content-Type': 'application/json',
+    })
+    await request('GET', '/state', undefined, { 'X-Expected-User': 'alice' })
+    expect(fetch.mock.calls[1]![1]!.headers).toEqual({ 'X-Expected-User': 'alice' })
+  })
+
+  it('gives up after the timeout and calls it offline', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(() => new Promise<Response>(() => {})),
+    )
+    const pending = request('GET', '/state')
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS)
+    expect(await pending).toEqual({ ok: false, error: { kind: 'offline' } })
+    vi.useRealTimers()
   })
 })

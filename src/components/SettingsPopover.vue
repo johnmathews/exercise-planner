@@ -47,11 +47,13 @@ const fileInput = ref<HTMLInputElement | null>(null)
 /** A parsed file waiting for "Import". */
 const pending = ref<ExportData | null>(null)
 const notice = ref<{ tone: 'error' | 'done'; text: string } | null>(null)
+const signOutProblem = ref<string | null>(null)
 
-// Each opening starts clean, rather than showing the last import's outcome.
+// Each opening starts clean, rather than showing the last import's or sign-out's outcome.
 watch(open, () => {
   pending.value = null
   notice.value = null
+  signOutProblem.value = null
 })
 
 function plural(n: number, word: string): string {
@@ -118,10 +120,10 @@ async function onFile(ev: Event): Promise<void> {
 
 async function signOut(): Promise<void> {
   const n = sync.pending
-  if (n && !window.confirm(`${n} change${n === 1 ? '' : 's'} haven’t synced yet. Sign out anyway?`))
-    return
+  const waiting = n === 1 ? '1 change hasn’t' : `${n} changes haven’t`
+  if (n && !window.confirm(`${waiting} synced yet. Sign out anyway?`)) return
   const problem = await session.logout()
-  if (problem) notice.value = { tone: 'error', text: describeProblem(problem) }
+  signOutProblem.value = problem ? describeProblem(problem) : null
 }
 
 function confirmImport(data: ExportData): void {
@@ -181,6 +183,14 @@ onBeforeUnmount(() => {
         </span>
         <button type="button" class="btn shrink-0" @click="signOut">Sign out</button>
       </div>
+      <p
+        v-if="signOutProblem"
+        role="alert"
+        class="text-sm text-warn"
+        data-testid="sign-out-problem"
+      >
+        {{ signOutProblem }}
+      </p>
       <div :class="LABEL">Appearance</div>
       <div
         class="mb-1 flex rounded-lg border border-line bg-subtle p-0.5"

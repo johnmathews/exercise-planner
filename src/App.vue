@@ -28,9 +28,12 @@ const link = ref(linkToken())
 function onHash(): void {
   link.value = linkToken()
 }
-/** Drop the token from the address bar and history once it has been used. */
-function closeLink(): void {
+/** Drop the token from the address bar and history, where a used or dead one has no place. */
+function forgetToken(): void {
   history.replaceState(null, '', location.pathname + location.search)
+}
+function closeLink(): void {
+  forgetToken()
   link.value = null
 }
 
@@ -59,7 +62,9 @@ function onOnline(): void {
   void sync.flush()
 }
 function onStorage(ev: StorageEvent): void {
-  if (ev.storageArea === localStorage) sync.onStorage(ev.key)
+  if (ev.storageArea !== localStorage) return
+  void session.onStorage(ev.key)
+  sync.onStorage(ev.key)
 }
 function onTick(): void {
   store.refreshNow()
@@ -92,7 +97,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <PasswordForm v-if="link" :token="link" @done="closeLink" />
+  <PasswordForm v-if="link" :key="link" :token="link" @done="closeLink" @spent="forgetToken" />
   <template v-else-if="session.status === 'signed-in'">
     <AppNavbar />
     <main class="mx-auto max-w-6xl px-4 pb-16 sm:px-6 lg:px-8 print:max-w-none print:p-0">

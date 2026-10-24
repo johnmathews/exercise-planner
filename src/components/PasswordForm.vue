@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useSessionStore, type AuthProblem, type LinkKind } from '@/stores/session'
 import { describeProblem } from '@/lib/problems'
 import AuthCard from '@/components/AuthCard.vue'
 
 const props = defineProps<{ token: string }>()
-const emit = defineEmits<{ done: [] }>()
+const emit = defineEmits<{
+  /** The password is set and the user signed in. */
+  done: []
+  /** The link can never work (used, expired, unknown), so its token can leave the address bar. */
+  spent: []
+}>()
 
 const MIN = 10
 const session = useSessionStore()
@@ -15,26 +20,50 @@ const password = ref('')
 const confirm = ref('')
 const busy = ref(false)
 const mismatch = ref(false)
+const confirmInput = ref<HTMLInputElement | null>(null)
 const LABEL = 'mb-1 block text-sm font-medium'
 
 const title = computed(() => {
-  if (!link.value) return problem.value ? 'Link not valid' : 'Checking the link…'
-  return link.value.kind === 'invite' ? `Welcome, ${link.value.username}` : 'Choose a new password'
+  if (link.value) {
+    return link.value.kind === 'invite'
+      ? `Welcome, ${link.value.username}`
+      : 'Choose a new password'
+  }
+  if (!problem.value) return 'Checking the link…'
+  return problem.value.code === 'gone' ? 'Link not valid' : 'Couldn’t check the link'
 })
+// Offline or busy: the link may be fine, so offer to try again rather than give up on it.
+const canRetry = computed(
+  () => !link.value && problem.value !== null && problem.value.code !== 'gone',
+)
 
-onMounted(async () => {
+async function check(): Promise<void> {
+  problem.value = null
   const result = await session.lookup(props.token)
-  if ('code' in result) problem.value = result
-  else link.value = result
-})
+  if (!('code' in result)) {
+    link.value = result
+    return
+  }
+  problem.value = result
+  if (result.code === 'gone') emit('spent')
+}
+
+onMounted(check)
 
 async function submit(): Promise<void> {
   mismatch.value = password.value !== confirm.value
-  if (mismatch.value || busy.value) return
+  if (mismatch.value) {
+    await nextTick()
+    confirmInput.value?.focus()
+    confirmInput.value?.select()
+    return
+  }
+  if (busy.value) return
   busy.value = true
   problem.value = await session.redeem(props.token, password.value)
   busy.value = false
   if (!problem.value) emit('done')
+  else if (problem.value.code === 'gone') emit('spent')
 }
 </script>
 
@@ -51,7 +80,15 @@ async function submit(): Promise<void> {
         </template>
       </p>
       <form class="flex flex-col gap-4" @submit.prevent="submit">
-        <input type="hidden" autocomplete="username" :value="link.username" />
+        <!-- For password managers, which save the new password against this username. -->
+        <input
+          type="text"
+          name="username"
+          autocomplete="username"
+          :value="link.username"
+          hidden
+          readonly
+        />
         <div>
           <label for="new-password" :class="LABEL">Password</label>
           <input
@@ -64,6 +101,7 @@ async function submit(): Promise<void> {
             maxlength="256"
             required
             aria-describedby="new-password-hint"
+            :aria-invalid="problem?.code === 'password'"
           />
           <p id="new-password-hint" class="mt-1 text-xs text-faint">
             At least {{ MIN }} characters.
@@ -73,11 +111,13 @@ async function submit(): Promise<void> {
           <label for="confirm-password" :class="LABEL">Repeat password</label>
           <input
             id="confirm-password"
+            ref="confirmInput"
             v-model="confirm"
             class="field w-full"
             type="password"
             autocomplete="new-password"
             required
+            :aria-invalid="mismatch"
           />
         </div>
         <p v-if="mismatch" role="alert" class="text-sm text-warn">The passwords don’t match.</p>
@@ -85,12 +125,15 @@ async function submit(): Promise<void> {
           {{ describeProblem(problem) }}
         </p>
         <button type="submit" class="btn-primary justify-center" :aria-busy="busy">
-          Set password
+          {{ busy ? 'Saving…' : 'Set password' }}
         </button>
       </form>
     </template>
-    <p v-else-if="problem" role="alert" class="text-sm text-warn" data-testid="link-problem">
-      {{ describeProblem(problem) }}
-    </p>
+    <template v-else-if="problem">
+      <p role="alert" class="text-sm text-warn" data-testid="link-problem">
+        {{ describeProblem(problem) }}
+      </p>
+      <button v-if="canRetry" type="button" class="btn mt-4" @click="check">Try again</button>
+    </template>
   </AuthCard>
 </template>
