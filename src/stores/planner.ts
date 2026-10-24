@@ -10,8 +10,7 @@ import {
   weekLabel,
 } from '@/lib/dates'
 import {
-  DATA_KEY,
-  LEGACY_DATA_KEY,
+  DEFAULT_SETTINGS,
   MAX_DAILY_PICK,
   MAX_SETS,
   MAX_TARGET,
@@ -21,8 +20,9 @@ import {
   SETTINGS_KEY,
   clamp,
   defaultExercises,
+  isRecord,
   normaliseWeight,
-  parsePlannerData,
+  parseJson,
   parseSettings,
   readKey,
   writeKey,
@@ -81,19 +81,17 @@ export const usePlannerStore = defineStore('planner', () => {
   const now = ref(new Date())
   /** Monday of the real current week, whichever week is on screen. */
   const currentWeekKey = computed(() => dateKey(mondayOf(now.value, 0)))
-  const loadData = () =>
-    parsePlannerData(readKey(DATA_KEY), readKey(LEGACY_DATA_KEY), currentWeekKey.value)
-  const data = loadData()
-  const settings = parseSettings(readKey(SETTINGS_KEY))
-  /** Whether settings were stored or changed; tracked here so blocked storage can't hide a change. */
-  const settingsSaved = ref(readKey(SETTINGS_KEY) !== null)
 
-  const plans = ref<Plans<Exercise>>(data.plans)
-  const log = ref<Log>(data.log)
+  // Plans, the log, accent and daily pick are the signed-in user's: the sync store fills them
+  // through `adopt` and saves them. Only the theme belongs to the device and is stored here.
+  const plans = ref<Plans<Exercise>>({})
+  const log = ref<Log>({})
   const weekOffset = ref(0)
-  const accent = ref(settings.accent)
-  const dailyPick = ref(settings.dailyPick)
-  const theme = ref<Theme>(settings.theme)
+  const accent = ref(DEFAULT_SETTINGS.accent)
+  const dailyPick = ref(DEFAULT_SETTINGS.dailyPick)
+  const theme = ref<Theme>(parseSettings(readKey(SETTINGS_KEY)).theme)
+  /** Whether the user has settings of their own (from the server, a change, or an import). */
+  const settingsSaved = ref(false)
   /** Config mode shows the plan-editing controls; normal mode only ticks cells. Not persisted. */
   const configMode = ref(false)
 
@@ -200,30 +198,34 @@ export const usePlannerStore = defineStore('planner', () => {
     if (dateKey(next) !== dateKey(now.value)) now.value = next
   }
 
-  /**
-   * Adopt a change another tab wrote (from a `storage` event). Without this a stale tab writes its
-   * whole in-memory state back and erases the other tab's edits. `key` is null when storage is cleared.
-   */
-  function syncFromStorage(key: string | null): void {
-    if (key === null || key === DATA_KEY) {
-      const fresh = loadData()
-      plans.value = fresh.plans
-      log.value = fresh.log
-    }
-    if (key === null || key === SETTINGS_KEY) {
-      settingsSaved.value = readKey(SETTINGS_KEY) !== null
-      const fresh = parseSettings(readKey(SETTINGS_KEY))
-      accent.value = fresh.accent
-      dailyPick.value = fresh.dailyPick
-      theme.value = fresh.theme
-    }
+  /** Replace the user's data wholesale: from the cache, the server, or another tab. */
+  function adopt(data: PlannerData, settings: PortableSettings | null): void {
+    plans.value = data.plans
+    log.value = data.log
+    accent.value = settings?.accent ?? DEFAULT_SETTINGS.accent
+    dailyPick.value = settings?.dailyPick ?? DEFAULT_SETTINGS.dailyPick
+    settingsSaved.value = settings !== null
+  }
+
+  /** Replace one week's plan, e.g. with the server's copy after a conflict. */
+  function adoptWeek(week: string, items: Exercise[]): void {
+    plans.value[week] = items
+  }
+
+  /** Forget the user's data on sign-out; the theme stays with the device. */
+  function clear(): void {
+    adopt({ plans: {}, log: {} }, null)
+    configMode.value = false
+    weekOffset.value = 0
   }
 
   function setAccent(color: string): void {
     accent.value = color
+    settingsSaved.value = true
   }
   function changeDailyPick(delta: number): void {
     dailyPick.value = clamp(dailyPick.value + delta, MIN_DAILY_PICK, MAX_DAILY_PICK)
+    settingsSaved.value = true
   }
   function setTheme(next: Theme): void {
     theme.value = next
@@ -243,20 +245,17 @@ export const usePlannerStore = defineStore('planner', () => {
     if (next && !settingsSaved.value) {
       accent.value = next.accent
       dailyPick.value = next.dailyPick
-      // Save even when the values equal the defaults, which the watcher below would skip.
-      saveSettings()
+      settingsSaved.value = true
     }
   }
 
-  const save = () => writeKey(DATA_KEY, { plans: plans.value, log: log.value })
-  watch([plans, log], save, { deep: true })
-  // Save a migration from the legacy key straight away, so it runs only once.
-  if (readKey(DATA_KEY) === null && readKey(LEGACY_DATA_KEY) !== null) save()
-  function saveSettings(): void {
-    settingsSaved.value = true
-    writeKey(SETTINGS_KEY, { accent: accent.value, dailyPick: dailyPick.value, theme: theme.value })
-  }
-  watch([accent, dailyPick, theme], saveSettings)
+  // Only the theme is written to the device's settings key, merged into what is there: it is
+  // what public/theme-init.js reads before first paint, and the accent and daily pick saved by
+  // the app before accounts existed stay untouched for the first-login import.
+  watch(theme, (next) => {
+    const stored = parseJson(readKey(SETTINGS_KEY))
+    writeKey(SETTINGS_KEY, { ...(isRecord(stored) ? stored : {}), theme: next })
+  })
 
   return {
     plans,
@@ -291,7 +290,9 @@ export const usePlannerStore = defineStore('planner', () => {
     nextWeek,
     thisWeek,
     refreshNow,
-    syncFromStorage,
+    adopt,
+    adoptWeek,
+    clear,
     setAccent,
     changeDailyPick,
     setTheme,

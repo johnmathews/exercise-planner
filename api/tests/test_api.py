@@ -546,3 +546,16 @@ def test_create_app_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> 
         assert c.get("/api/healthz").json() == {"ok": True}
     assert (tmp_path / "fitness.db").exists()
     assert (tmp_path / "backup").is_dir()  # the backup thread ran once at startup
+
+
+def test_a_request_for_another_user_is_refused(client: TestClient, config: Config) -> None:
+    """A tab still showing alice must not read or write bob's data with bob's cookie."""
+    sign_up(client, config, "bob")
+    alice = {"X-Expected-User": "alice"}
+    assert client.get("/api/state", headers=alice).json() == {"error": "auth"}
+    r = client.put(f"/api/ticks/exercise/{WEEK}/pu/0", json={"done": True}, headers=alice)
+    assert (r.status_code, r.json()) == (401, {"error": "auth"})
+    assert client.get("/api/state").json()["exercise"]["log"] == {}
+    # The right user, in any case, is fine; so is no header at all.
+    assert client.get("/api/state", headers={"X-Expected-User": "BOB"}).status_code == 200
+    assert client.get("/api/auth/me").json() == {"username": "bob"}

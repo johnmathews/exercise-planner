@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { reactive, watch } from 'vue'
 import {
   dayCounts,
   goalMet,
@@ -57,5 +58,22 @@ describe('tracker helpers', () => {
     const a = newId()
     expect(a).toMatch(/^x[0-9a-z]+$/)
     expect(newId()).not.toBe(a)
+  })
+})
+
+describe('toggleDay on a reactive log', () => {
+  it('flips through the reactive proxy, so a watcher sees every change', () => {
+    const log = reactive<Log>({})
+    const seen: (boolean | undefined)[] = []
+    watch(
+      () => log['2026-10-19']?.pu?.[2],
+      (v) => seen.push(v),
+      { flush: 'sync' },
+    )
+    toggleDay(log, '2026-10-19', 'pu', 2)
+    toggleDay(log, '2026-10-19', 'pu', 2)
+    toggleDay(log, '2026-10-19', 'sq', 0)
+    // Creating the flags is a change too (undefined → false), then each flip.
+    expect(seen).toEqual([false, true, false])
   })
 })

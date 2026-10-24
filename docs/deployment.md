@@ -52,8 +52,14 @@ on `http://localhost:8000`, with the API's data in the `api-data` volume. Mint a
 
 ## 2. nginx
 
-`nginx.conf` serves `dist/`:
+`nginx.conf` serves `dist/` and proxies the API:
 
+- `/api/*`: forwarded to `fitness-api:8000`, the API container, on the same Docker network. The
+  upstream is a variable resolved through Docker's DNS (`resolver 127.0.0.11`), so nginx starts and
+  keeps serving the app while the API is down. `/api/` then answers 502, or 504 within 3 seconds
+  while nginx still holds the stopped container's address (`proxy_connect_timeout 3s`); the client
+  treats both as offline. Bodies are capped at 1 MiB, as the API caps them. The API's own `Cache-Control` is
+  hidden and the server-level `no-store` sent instead, so each response carries exactly one.
 - `/assets/*`: hashed bundles with `Cache-Control: public, max-age=31536000, immutable`; a missing
   asset returns 404 rather than falling back.
 - Everything else gets `Cache-Control: no-cache`, so a new deploy takes effect on the next load.
@@ -72,7 +78,7 @@ All headers are set once at server level; `Cache-Control` varies through a `map`
 | Workflow                       | Trigger                      | Does                                                                                                           |
 | ------------------------------ | ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `.github/workflows/ci.yml`     | pull request, push to `main` | `check`: lint, format, types, tests with coverage, build. `api`: ruff, mypy, pytest with coverage, `pip-audit` |
-| `.github/workflows/docker.yml` | pull request, push to `main` | `build` on PRs; `publish` on `main`; each runs once per image                                                  |
+| `.github/workflows/docker.yml` | pull request, push to `main` | `build` and `compose` on PRs; `publish` on `main`; build and publish run once per image                        |
 
 Both jobs build `linux/amd64` and `linux/arm64` for each image, so a PR proves the multi-arch build
 before `main` publishes it. For the API, the PR build also smoke-tests each architecture: the amd64
@@ -84,7 +90,22 @@ is the only one granted `packages: write`. It logs in to `ghcr.io` with `GITHUB_
 
 ## 4. Data and hosting
 
-Until the client syncs with the API, all data lives in each browser's `localStorage`, keyed by origin. Moving the app to a new host or
-port starts every browser with empty data. Clearing site data erases the log, and no server-side
-copy exists. Settings → Export saves a JSON copy, and Import… merges one back on any origin
-(`architecture.md` §4), which is how data moves between hosts and how it is backed up.
+Each user's data lives in the API's SQLite database (`api.md` §2), backed up daily with
+`VACUUM INTO` and by PBS. Each browser keeps a per-user cache in `localStorage` so the app opens
+instantly and works offline (`architecture.md` §7). Moving to a new hostname now only costs that
+cache: signing in again fetches everything from the server. Settings → Export still saves a JSON
+copy of one person's data.
+
+The web container must reach the API as `fitness-api` on a shared Docker network: `nginx.conf`
+names that host. `docker-compose.yml` does this locally, and the home-server compose file does it
+in production.
+
+`scripts/compose-smoke.sh` builds and starts both images with `docker-compose.yml` and checks the
+whole path through nginx:
+
+- a user signs up from an `ep-admin` invite, writes a tick and reads it back;
+- a write from a foreign `Origin` gets 403;
+- with the API stopped, `/api/` answers 502 or 504 within seconds while nginx still serves the app.
+
+CI runs it on every pull request (the `compose` job in `docker.yml`); locally it takes about a
+minute and leaves nothing running.

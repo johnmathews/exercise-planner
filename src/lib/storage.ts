@@ -244,3 +244,11 @@ export function writeKey(key: string, value: unknown): void {
     // Storage unavailable or full: keep running with in-memory state.
   }
 }
+
+export function removeKey(key: string): void {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // Storage unavailable: nothing was stored.
+  }
+}

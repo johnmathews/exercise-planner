@@ -2,6 +2,9 @@
 import { onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { usePlannerStore } from '@/stores/planner'
 import { useDietStore } from '@/stores/diet'
+import { useSessionStore } from '@/stores/session'
+import { useSyncStore } from '@/stores/sync'
+import { describeProblem } from '@/lib/problems'
 import { ACCENTS, MAX_DAILY_PICK, MIN_DAILY_PICK } from '@/lib/storage'
 import { THEMES, type Theme } from '@/lib/theme'
 import {
@@ -32,6 +35,8 @@ const IMPORT_ERRORS: Record<ParseError | 'read', string> = {
 
 const store = usePlannerStore()
 const diet = useDietStore()
+const session = useSessionStore()
+const sync = useSyncStore()
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
@@ -42,11 +47,13 @@ const fileInput = ref<HTMLInputElement | null>(null)
 /** A parsed file waiting for "Import". */
 const pending = ref<ExportData | null>(null)
 const notice = ref<{ tone: 'error' | 'done'; text: string } | null>(null)
+const signOutProblem = ref<string | null>(null)
 
-// Each opening starts clean, rather than showing the last import's outcome.
+// Each opening starts clean, rather than showing the last import's or sign-out's outcome.
 watch(open, () => {
   pending.value = null
   notice.value = null
+  signOutProblem.value = null
 })
 
 function plural(n: number, word: string): string {
@@ -111,6 +118,14 @@ async function onFile(ev: Event): Promise<void> {
   pending.value = result.data
 }
 
+async function signOut(): Promise<void> {
+  const n = sync.pending
+  const waiting = n === 1 ? '1 change hasn’t' : `${n} changes haven’t`
+  if (n && !window.confirm(`${waiting} synced yet. Sign out anyway?`)) return
+  const problem = await session.logout()
+  signOutProblem.value = problem ? describeProblem(problem) : null
+}
+
 function confirmImport(data: ExportData): void {
   const { exercise, diet: food, settings } = data
   store.importData(exercise, settings)
@@ -161,6 +176,21 @@ onBeforeUnmount(() => {
       role="group"
       aria-label="Settings"
     >
+      <div :class="LABEL">Account</div>
+      <div class="mb-1 flex items-center justify-between gap-2">
+        <span class="truncate text-sm" data-testid="signed-in-as">
+          <span class="text-muted">Signed in as</span> {{ session.user }}
+        </span>
+        <button type="button" class="btn shrink-0" @click="signOut">Sign out</button>
+      </div>
+      <p
+        v-if="signOutProblem"
+        role="alert"
+        class="text-sm text-warn"
+        data-testid="sign-out-problem"
+      >
+        {{ signOutProblem }}
+      </p>
       <div :class="LABEL">Appearance</div>
       <div
         class="mb-1 flex rounded-lg border border-line bg-subtle p-0.5"

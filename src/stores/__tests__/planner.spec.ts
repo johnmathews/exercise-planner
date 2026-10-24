@@ -39,34 +39,29 @@ describe('planner store', () => {
     expect(s.days.findIndex((d) => d.isToday)).toBe(4)
   })
 
-  it('migrates saved prototype data from the legacy key and saves it as v2 at once', () => {
-    localStorage.setItem(
-      LEGACY_DATA_KEY,
-      JSON.stringify({
-        exercises: [{ id: 'a', name: 'A', reps: 1, target: 2 }],
-        log: { '2026-10-19': { a: [true, true, false, false, false, false, false] } },
-      }),
-    )
+  it('never reads or writes the keys from before accounts', async () => {
+    const legacy = JSON.stringify({ exercises: [{ id: 'a', name: 'A', reps: 1, target: 2 }] })
+    const v2 = JSON.stringify({ plans: { '2026-10-19': [] }, log: {} })
+    localStorage.setItem(LEGACY_DATA_KEY, legacy)
+    localStorage.setItem(DATA_KEY, v2)
     setActivePinia(createPinia())
     const s = usePlannerStore()
-    expect(s.exercises).toHaveLength(1)
-    expect(s.totalFor('a')).toBe(2)
-    expect(s.grandTotal).toBe(2)
-    expect(stored(DATA_KEY)).toMatchObject({ plans: { '2026-10-19': [{ id: 'a' }] } })
-    expect(localStorage.getItem(LEGACY_DATA_KEY)).not.toBeNull()
+    expect(s.exercises).toHaveLength(5)
+    s.toggle('pu', 0)
+    s.addExercise({ name: 'Lunges', reps: 12, perSide: true })
+    await nextTick()
+    expect(localStorage.getItem(LEGACY_DATA_KEY)).toBe(legacy)
+    expect(localStorage.getItem(DATA_KEY)).toBe(v2)
   })
 
-  it('toggles a cell on and off and persists the log', async () => {
+  it('toggles a cell on and off', () => {
     const s = usePlannerStore()
     s.toggle('pu', 0)
     expect(s.isDone('pu', 0)).toBe(true)
     expect(s.totalFor('pu')).toBe(1)
-    await nextTick()
-    expect(stored(DATA_KEY)).toMatchObject({
-      log: { '2026-10-19': { pu: [true, false, false, false, false, false, false] } },
-    })
     s.toggle('pu', 0)
     expect(s.isDone('pu', 0)).toBe(false)
+    expect(s.log['2026-10-19']!.pu).toEqual([false, false, false, false, false, false, false])
   })
 
   it('counts picks per day and the grand total across exercises', () => {
@@ -87,6 +82,13 @@ describe('planner store', () => {
     expect(s.dayCounts[0]).toBe(1)
     expect(s.grandTotal).toBe(1)
     expect(s.log['2026-10-19']?.pu?.[0]).toBe(true)
+  })
+
+  it('knows the real current week whichever week is on screen', () => {
+    const s = usePlannerStore()
+    s.nextWeek()
+    expect(s.weekKey).toBe('2026-10-26')
+    expect(s.currentWeekKey).toBe('2026-10-19')
   })
 
   it('keeps each week separate when navigating', () => {
@@ -113,7 +115,7 @@ describe('planner store', () => {
     s.changeTarget('missing', 1)
   })
 
-  it('adds an exercise with goal 3 and ignores an empty name', async () => {
+  it('adds an exercise with goal 3 and ignores an empty name', () => {
     const s = usePlannerStore()
     expect(s.addExercise({ name: '   ', reps: 5, perSide: false })).toBe(false)
     expect(s.exercises).toHaveLength(5)
@@ -121,9 +123,7 @@ describe('planner store', () => {
     const added = s.exercises[5]!
     expect(added).toMatchObject({ name: 'Lunges', reps: 12, perSide: true, target: 3 })
     expect(added.id).toMatch(/^x/)
-    await nextTick()
-    const saved = stored(DATA_KEY) as { plans: Record<string, unknown[]> }
-    expect(saved.plans['2026-10-19']).toHaveLength(6)
+    expect(s.plans['2026-10-19']).toHaveLength(6)
   })
 
   it('stores non-positive or non-numeric reps as 0', () => {
@@ -148,51 +148,75 @@ describe('planner store', () => {
     expect(s.now).toBe(before)
   })
 
-  it('syncFromStorage adopts another tab’s data and settings', () => {
+  it('adopts data and settings wholesale, and adopts one week at a time', () => {
     const s = usePlannerStore()
-    localStorage.setItem(DATA_KEY, JSON.stringify({ plans: { '2026-10-19': [] }, log: {} }))
-    localStorage.setItem(
-      SETTINGS_KEY,
-      JSON.stringify({ accent: '#ff9f0a', dailyPick: 5, theme: 'light' }),
+    const plan = [{ id: 'a', name: 'A', reps: 5, target: 2 }]
+    s.adopt(
+      {
+        plans: { '2026-10-19': plan },
+        log: { '2026-10-19': { a: [true, false, false, false, false, false, false] } },
+      },
+      { accent: '#ff9f0a', dailyPick: 5 },
     )
-    s.syncFromStorage(SETTINGS_KEY)
-    expect(s.accent).toBe('#ff9f0a')
-    expect(s.theme).toBe('light')
-    expect(s.exercises).toHaveLength(5)
-    s.syncFromStorage(DATA_KEY)
+    expect(s.exercises).toEqual(plan)
+    expect(s.grandTotal).toBe(1)
+    expect([s.accent, s.dailyPick]).toEqual(['#ff9f0a', 5])
+    expect(s.savedSettings()).toEqual({ accent: '#ff9f0a', dailyPick: 5 })
+    s.adoptWeek('2026-10-19', [])
     expect(s.exercises).toEqual([])
+    s.adopt({ plans: {}, log: {} }, null)
+    expect(s.exercises).toHaveLength(5)
+    expect([s.accent, s.dailyPick]).toEqual(['#30d158', 3])
+    expect(s.savedSettings()).toBeNull()
   })
 
-  it('syncFromStorage(null) resets to defaults after storage is cleared elsewhere', () => {
+  it('clears the user’s data, the mode and the week on sign-out, but keeps the theme', () => {
     const s = usePlannerStore()
     s.toggle('pu', 0)
     s.setAccent('#bf5af2')
-    localStorage.clear()
-    s.syncFromStorage(null)
+    s.setConfigMode(true)
+    s.nextWeek()
+    s.setTheme('dark')
+    s.clear()
     expect(s.grandTotal).toBe(0)
     expect(s.accent).toBe('#30d158')
+    expect(s.configMode).toBe(false)
+    expect(s.weekOffset).toBe(0)
+    expect(s.theme).toBe('dark')
   })
 
-  it('persists settings separately and clamps daily pick to 1–8', async () => {
+  it('clamps daily pick to 1–8, and a change counts as saved settings', () => {
     const s = usePlannerStore()
-    expect(s.accent).toBe('#30d158')
-    expect(s.dailyPick).toBe(3)
+    expect(s.savedSettings()).toBeNull()
     s.setAccent('#bf5af2')
+    expect(s.savedSettings()).toEqual({ accent: '#bf5af2', dailyPick: 3 })
     for (let i = 0; i < 10; i++) s.changeDailyPick(1)
     expect(s.dailyPick).toBe(8)
     for (let i = 0; i < 10; i++) s.changeDailyPick(-1)
     expect(s.dailyPick).toBe(1)
-    await nextTick()
-    expect(stored(SETTINGS_KEY)).toEqual({ accent: '#bf5af2', dailyPick: 1, theme: 'system' })
-    expect(stored(DATA_KEY)).toBeNull()
   })
 
-  it('persists the theme with the other settings', async () => {
+  it('stores only the theme, merged into the device’s settings key', async () => {
+    localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({ accent: '#ff9f0a', dailyPick: 5, theme: 'light' }),
+    )
+    setActivePinia(createPinia())
     const s = usePlannerStore()
-    expect(s.theme).toBe('system')
+    expect(s.theme).toBe('light')
+    // The accent and daily pick are the user's, from the server, not the device's.
+    expect([s.accent, s.dailyPick]).toEqual(['#30d158', 3])
+    s.setAccent('#bf5af2')
     s.setTheme('dark')
     await nextTick()
-    expect(stored(SETTINGS_KEY)).toEqual({ accent: '#30d158', dailyPick: 3, theme: 'dark' })
+    expect(stored(SETTINGS_KEY)).toEqual({ accent: '#ff9f0a', dailyPick: 5, theme: 'dark' })
+  })
+
+  it('writes a settings key holding only the theme when there was none', async () => {
+    const s = usePlannerStore()
+    s.setTheme('light')
+    await nextTick()
+    expect(stored(SETTINGS_KEY)).toEqual({ theme: 'light' })
   })
 })
 
@@ -225,7 +249,7 @@ describe('updateExercise', () => {
   })
   afterEach(() => vi.useRealTimers())
 
-  it('replaces the fields but keeps the id, goal and history', async () => {
+  it('replaces the fields but keeps the id, goal and history', () => {
     const s = usePlannerStore()
     s.toggle('sq', 0)
     s.changeTarget('sq', 1)
@@ -241,8 +265,6 @@ describe('updateExercise', () => {
       target: 5,
     })
     expect(s.totalFor('sq')).toBe(1)
-    await nextTick()
-    expect(JSON.stringify(stored(DATA_KEY))).toContain('"weight":12')
   })
 
   it('drops the weight when cleared and rejects bad input', () => {
@@ -275,14 +297,13 @@ describe('weekly plans', () => {
 
   const names = (s: ReturnType<typeof usePlannerStore>) => s.exercises.map((e) => e.name)
 
-  it('shows the defaults until something changes, then saves only the changed week', async () => {
+  it('shows the defaults until something changes, then plans only the changed week', () => {
     const s = usePlannerStore()
     expect(names(s)).toHaveLength(5)
     expect(s.carriedFrom).toBeNull()
     expect(s.plans).toEqual({})
     s.changeTarget('pu', 1)
-    await nextTick()
-    expect(Object.keys((stored(DATA_KEY) as { plans: object }).plans)).toEqual(['2026-10-19'])
+    expect(Object.keys(s.plans)).toEqual(['2026-10-19'])
   })
 
   it('carries the latest earlier plan forward to unplanned weeks', () => {
@@ -402,7 +423,7 @@ describe('importData', () => {
 
   const squats = { id: 'sq', name: 'Squats', reps: 15, target: 4 }
 
-  it('merges plans and ticks, keeps what was here, and saves', async () => {
+  it('merges plans and ticks, keeping what was here', async () => {
     const s = usePlannerStore()
     s.toggle('pu', 0)
     s.importData(
@@ -419,9 +440,8 @@ describe('importData', () => {
     // This week already had its own plan (the tick gave it one), so it keeps the defaults.
     expect(s.exercises.map((e) => e.id)).toEqual(['pu', 'pl', 'sq', 'be', 'kh'])
     expect(s.isDone('pu', 0) && s.isDone('pu', 1)).toBe(true)
-    const saved = stored(DATA_KEY) as { plans: Record<string, unknown[]>; log: object }
-    expect(saved.plans['2026-10-12']).toEqual([squats])
-    expect(saved.log).toHaveProperty(['2026-10-12', 'sq', 0], true)
+    expect(s.plans['2026-10-12']).toEqual([squats])
+    expect(s.log).toHaveProperty(['2026-10-12', 'sq', 0], true)
   })
 
   it('applies the file’s settings only when none are saved', async () => {
@@ -434,13 +454,11 @@ describe('importData', () => {
     s.importData({ plans: {}, log: {} }, { accent: '#bf5af2', dailyPick: 2 })
     await nextTick()
     expect([s.accent, s.dailyPick]).toEqual(['#0a84ff', 5])
-    expect(stored(SETTINGS_KEY)).toEqual({ accent: '#0a84ff', dailyPick: 5, theme: 'system' })
   })
 
-  it('saves imported settings even when they equal the defaults', () => {
+  it('counts imported settings as saved even when they equal the defaults', () => {
     const s = usePlannerStore()
     s.importData({ plans: {}, log: {} }, { accent: '#30d158', dailyPick: 3 })
-    expect(stored(SETTINGS_KEY)).toEqual({ accent: '#30d158', dailyPick: 3, theme: 'system' })
     expect(s.savedSettings()).toEqual({ accent: '#30d158', dailyPick: 3 })
   })
 
@@ -458,10 +476,9 @@ describe('importData', () => {
     expect([s.accent, s.dailyPick]).toEqual(['#0a84ff', 3])
   })
 
-  it('adopts another tab’s settings write as saved', () => {
+  it('treats adopted settings as saved', () => {
     const s = usePlannerStore()
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ accent: '#ff9f0a', dailyPick: 2 }))
-    s.syncFromStorage(SETTINGS_KEY)
+    s.adopt({ plans: {}, log: {} }, { accent: '#ff9f0a', dailyPick: 2 })
     s.importData({ plans: {}, log: {} }, { accent: '#bf5af2', dailyPick: 5 })
     expect([s.accent, s.dailyPick]).toEqual(['#ff9f0a', 2])
   })
@@ -477,11 +494,11 @@ describe('importData', () => {
     expect(s.plans['2026-10-05']).toEqual([pushups])
   })
 
-  it('treats a saved theme as saved settings', async () => {
+  it('does not count a theme change as saved settings: the theme is the device’s', async () => {
     const s = usePlannerStore()
     s.setTheme('dark')
     await nextTick()
     s.importData({ plans: {}, log: {} }, { accent: '#0a84ff', dailyPick: 5 })
-    expect([s.accent, s.dailyPick, s.theme]).toEqual(['#30d158', 3, 'dark'])
+    expect([s.accent, s.dailyPick, s.theme]).toEqual(['#0a84ff', 5, 'dark'])
   })
 })

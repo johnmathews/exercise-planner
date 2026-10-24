@@ -3,8 +3,8 @@
 > Purpose
 >
 > A weekly workout and diet log: exercises and foods down the side, Monday–Sunday across the top,
-> one click to tick a day. Vue 3 + Vite + Tailwind single-page app with light and dark themes;
-> state lives in the browser's `localStorage`.
+> one click to tick a day. Vue 3 + Vite + Tailwind single-page app with light and dark themes,
+> and a Python API that keeps each person's data in sync across devices.
 
 ## 1. What it does
 
@@ -28,11 +28,14 @@
 - `‹` / `›` move between weeks for both sections; past weeks persist. **Print…** produces a
   black-on-white sheet.
 - **Settings** sets the theme (System, Light or Dark), the accent colour and the exercises-per-day
-  target (1–8).
+  target (1–8), and shows who is signed in, with **Sign out**.
+- **Accounts and sync.** Each person signs in with a username and password. Accounts come only from
+  invite links (`docs/api.md` §4). Plans, ticks, the accent and the daily pick are stored on the
+  server and sync across devices; the theme stays with each device. The app opens from a cached
+  copy and keeps working offline, sending changes once the connection is back.
 - **Export and import.** Settings → **Export** downloads your plans, ticks, accent and daily pick
   as a JSON file; **Import…** merges such a file in. An import only adds: weeks you already have
-  keep their plan, and no tick is ever cleared. Data lives in one browser, so export is also the
-  backup.
+  keep their plan, and no tick is ever cleared. The export is each person's own copy of their data.
 
 ## 2. Getting started
 
@@ -46,6 +49,20 @@ npm install -g npm@11      # Node 22 only; or run: npx -y npm@11 ci
 npm ci
 npm run dev                # http://localhost:5173
 ```
+
+The app needs the API to sign in. Run it alongside (Python 3.13 and [uv](https://docs.astral.sh/uv/)),
+with `PUBLIC_ORIGIN` set to the dev server's origin, and mint yourself an invite:
+
+```bash
+cd api && uv sync
+export PUBLIC_ORIGIN=http://localhost:5173 COOKIE_SECURE=false DATA_DIR=./.data
+uv run ep-admin invite you                      # prints http://localhost:5173/#/invite/…
+uv run uvicorn --factory exercise_planner_api.app:create_app_from_env --port 8000
+```
+
+Vite forwards `/api` to `http://127.0.0.1:8000` (set `API_URL` to change it). Open the invite link
+from the dev server's own address: the API checks the `Origin` of every write, so
+`http://127.0.0.1:5173` and `http://localhost:5173` are different origins.
 
 Day-to-day commands:
 
@@ -62,41 +79,49 @@ npm run preview            # serve dist/ locally
 
 ## 3. Deploy
 
-The app is static files served by nginx in a container. CI publishes a multi-architecture image
-(`linux/amd64` and `linux/arm64`) to GHCR on every push to `main`:
+Two containers: the app (static files on nginx, port **8080**) and the API (port **8000**), with
+nginx forwarding `/api/` to the API so the browser sees one origin. CI publishes both as
+multi-architecture images (`linux/amd64` and `linux/arm64`) to GHCR on every push to `main`:
 
-| Tag               | Points at                                           |
-| ----------------- | --------------------------------------------------- |
-| `latest`          | the newest build of `main`                          |
-| `sha-<short sha>` | a specific commit (e.g. `sha-c28cb59`), for pinning |
+| Image                                      | Tags                        |
+| ------------------------------------------ | --------------------------- |
+| `ghcr.io/johnmathews/exercise-planner`     | `latest`, `sha-<short sha>` |
+| `ghcr.io/johnmathews/exercise-planner-api` | `latest`, `sha-<short sha>` |
 
-Run it with Docker; the container listens on port **8080** as a non-root user:
-
-```bash
-docker run -d --name exercise-planner --restart unless-stopped -p 8080:8080 \
-  ghcr.io/johnmathews/exercise-planner:latest
-```
-
-Or with Docker Compose:
+Run them with Docker Compose. The API service must be named `fitness-api`, since that is the
+host `nginx.conf` forwards to:
 
 ```yaml
 services:
-  exercise-planner:
+  web:
     image: ghcr.io/johnmathews/exercise-planner:latest
     ports:
       - '8080:8080'
     restart: unless-stopped
+  fitness-api:
+    image: ghcr.io/johnmathews/exercise-planner-api:latest
+    environment:
+      PUBLIC_ORIGIN: https://fitness.example.com # the address people open
+    volumes:
+      - ./fitness-data:/data # owned by uid 10001
+    mem_limit: 160m
+    restart: unless-stopped
 ```
 
-Update to the newest build with `docker compose pull && docker compose up -d` (or `docker pull` and
-recreate the container). `GET /healthz` returns `200 ok`, and the image's `HEALTHCHECK` uses it. To
-build the image yourself instead: `docker build -t exercise-planner .`
+Then mint the first account and open the link it prints:
 
-**Keep the URL stable.** Every log lives in each browser's `localStorage`, scoped to the exact
-origin (scheme, host and port). Serving the app from a new hostname or port starts every browser
-with an empty log, and clearing site data erases it. No server-side copy exists.
+```bash
+docker compose exec fitness-api ep-admin invite <name>
+```
 
-[docs/deployment.md](docs/deployment.md) covers the image, nginx headers and the CI pipeline.
+Serve it over HTTPS: the session cookie is `Secure`. For a plain-http trial, set
+`COOKIE_SECURE: 'false'` on the API. Update with `docker compose pull && docker compose up -d`.
+`GET /healthz` (nginx) and `GET /api/healthz` (the API) both return 200.
+`docker compose up --build` in this repo runs both from source, and `scripts/compose-smoke.sh`
+checks the whole path end to end.
+
+[docs/deployment.md](docs/deployment.md) covers the images, nginx and CI, and
+[docs/api.md](docs/api.md) the API, accounts, backups and `ep-admin`.
 
 ## 4. Documentation
 

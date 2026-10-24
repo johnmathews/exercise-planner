@@ -1,17 +1,12 @@
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { usePlannerStore } from '@/stores/planner'
 import {
-  DIET_KEY,
-  LEGACY_DIET_KEY,
   MAX_TARGET,
   MIN_TARGET,
   NEW_FOOD_TARGET,
   clamp,
   defaultFoods,
-  parseDietData,
-  readKey,
-  writeKey,
   type DietData,
   type Food,
   type Log,
@@ -26,12 +21,9 @@ import * as tracker from '@/lib/tracker'
  */
 export const useDietStore = defineStore('diet', () => {
   const planner = usePlannerStore()
-  const loadData = () =>
-    parseDietData(readKey(DIET_KEY), readKey(LEGACY_DIET_KEY), planner.currentWeekKey)
-  const data = loadData()
-
-  const plans = ref<Plans<Food>>(data.plans)
-  const log = ref<Log>(data.log)
+  // Filled and saved by the sync store, like the planner's data.
+  const plans = ref<Plans<Food>>({})
+  const log = ref<Log>({})
 
   const week = computed(() => log.value[planner.weekKey] ?? {})
   const planWeek = computed(() => planSource(plans.value, planner.weekKey))
@@ -89,12 +81,19 @@ export const useDietStore = defineStore('diet', () => {
     plans.value[planner.nextWeekKey] = copyPlan(foods.value)
   }
 
-  /** Adopt another tab's write; `key` is null when storage was cleared. */
-  function syncFromStorage(key: string | null): void {
-    if (key !== null && key !== DIET_KEY) return
-    const fresh = loadData()
-    plans.value = fresh.plans
-    log.value = fresh.log
+  /** Replace the user's food data wholesale: from the cache, the server, or another tab. */
+  function adopt(data: DietData): void {
+    plans.value = data.plans
+    log.value = data.log
+  }
+
+  /** Replace one week's food plan, e.g. with the server's copy after a conflict. */
+  function adoptWeek(week: string, items: Food[]): void {
+    plans.value[week] = items
+  }
+
+  function clear(): void {
+    adopt({ plans: {}, log: {} })
   }
 
   /** Merges an export's food plans and log in without deleting anything (`mergeTracked`). */
@@ -103,10 +102,6 @@ export const useDietStore = defineStore('diet', () => {
     plans.value = merged.plans
     log.value = merged.log
   }
-
-  const save = () => writeKey(DIET_KEY, { plans: plans.value, log: log.value })
-  watch([plans, log], save, { deep: true })
-  if (readKey(DIET_KEY) === null && readKey(LEGACY_DIET_KEY) !== null) save()
 
   return {
     plans,
@@ -124,7 +119,9 @@ export const useDietStore = defineStore('diet', () => {
     removeFood,
     nextWeekHasPlan,
     copyToNextWeek,
-    syncFromStorage,
+    adopt,
+    adoptWeek,
+    clear,
     importData,
   }
 })

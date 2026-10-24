@@ -1,14 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import App from '@/App.vue'
-import { DIET_KEY } from '@/lib/storage'
+import { CACHE_PREFIX } from '@/stores/sync'
+import type { FakeApi } from '@/lib/__tests__/fakeApi'
+import { USER, emptyState, signedIn } from '@/lib/__tests__/signedIn'
 
 const NOW = new Date(2026, 9, 23, 18, 0)
 
 let wrapper: VueWrapper
+let api: FakeApi
 
+/** Mount the app signed in as alice, with an empty account. */
 function mountApp(): VueWrapper {
+  api = signedIn()
   const pinia = createPinia()
   setActivePinia(pinia)
   wrapper = mount(App, { global: { plugins: [pinia] }, attachTo: document.body })
@@ -39,6 +44,7 @@ describe('DietSection', () => {
 
   afterEach(() => {
     wrapper?.unmount()
+    vi.unstubAllGlobals()
     vi.useRealTimers()
     vi.restoreAllMocks()
   })
@@ -84,7 +90,7 @@ describe('DietSection', () => {
     expect(cells('Fruit')[0]!.attributes('aria-pressed')).toBe('true')
   })
 
-  it('adds a food, persists it, and removes one after confirmation', async () => {
+  it('adds a food, syncs it, and removes one after confirmation', async () => {
     await mountConfig()
     await wrapper.get('input[aria-label="New food name"]').setValue('Beans')
     await wrapper.get('input[aria-label="New food name"]').trigger('submit')
@@ -92,10 +98,9 @@ describe('DietSection', () => {
     expect(
       (wrapper.get('input[aria-label="New food name"]').element as HTMLInputElement).value,
     ).toBe('')
-    await wrapper.vm.$nextTick()
-    expect(JSON.parse(localStorage.getItem(DIET_KEY)!).plans['2026-10-19'].at(-1).name).toBe(
-      'Beans',
-    )
+    await flushPromises()
+    const plan = api.accounts.get(USER)!.plans.diet['2026-10-19']!.items as { name: string }[]
+    expect(plan.at(-1)!.name).toBe('Beans')
 
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     await diet().get('button[aria-label="Remove Nuts"]').trigger('click')
@@ -118,11 +123,11 @@ describe('DietSection', () => {
 
   it('adopts another tab’s diet changes', async () => {
     mountApp()
-    localStorage.setItem(
-      DIET_KEY,
-      JSON.stringify({ plans: { '2026-10-19': [{ id: 'q', name: 'Quinoa', target: 2 }] } }),
-    )
-    window.dispatchEvent(new StorageEvent('storage', { key: DIET_KEY, storageArea: localStorage }))
+    const other = emptyState()
+    other.diet.plans = { '2026-10-19': [{ id: 'q', name: 'Quinoa', target: 2 }] }
+    const key = CACHE_PREFIX + USER
+    localStorage.setItem(key, JSON.stringify(other))
+    window.dispatchEvent(new StorageEvent('storage', { key, storageArea: localStorage }))
     await wrapper.vm.$nextTick()
     expect(
       diet()
