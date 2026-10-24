@@ -1,5 +1,5 @@
 {
   "description": "NaN and Infinity are not JSON, even though some parsers accept them.",
-  "inputText": "{\"format\": \"exercise-planner-export\", \"version\": 1, \"settings\": {\"dailyPick\": NaN}}",
+  "inputText": "{\"format\": \"fitness-planner-export\", \"version\": 1, \"settings\": {\"dailyPick\": NaN}}",
   "expected": { "ok": false, "error": "json" }
 }

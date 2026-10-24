@@ -8,10 +8,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from exercise_planner_api import auth, data
-from exercise_planner_api.app import create_app
-from exercise_planner_api.config import Config
-from exercise_planner_api.db import connect
+from fitness_planner_api import auth, data
+from fitness_planner_api.app import create_app
+from fitness_planner_api.config import Config
+from fitness_planner_api.db import connect
 
 from .conftest import ORIGIN, Clock
 from .fixtures import read_fixture
@@ -440,7 +440,7 @@ def test_sample_import_then_export_round_trips(client: TestClient, config: Confi
     exported = client.get("/api/export")
     assert (
         exported.headers["content-disposition"]
-        == 'attachment; filename="exercise-planner-2026-10-23.json"'
+        == 'attachment; filename="fitness-planner-2026-10-23.json"'
     )
     assert exported.json() == {**sample, "exportedAt": "2026-10-23T08:00:00.000Z"}
     assert post_import(client, sample).json() == {"weeks": 0, "ticks": 0, "settings": False}
@@ -456,7 +456,7 @@ def test_import_merges_without_deleting(client: TestClient, config: Config) -> N
     r = post_import(
         client,
         {
-            "format": "exercise-planner-export",
+            "format": "fitness-planner-export",
             "version": 1,
             "exercise": {
                 "plans": {WEEK: [squats], "2026-10-12": [squats]},
@@ -478,9 +478,9 @@ def test_import_merges_without_deleting(client: TestClient, config: Config) -> N
     [
         ("{oops", "json"),
         ("null", "json"),
-        ('{"format": "exercise-planner-export", "version": 1, "x": NaN}', "json"),
+        ('{"format": "fitness-planner-export", "version": 1, "x": NaN}', "json"),
         ({"plans": {}}, "format"),
-        ({"format": "exercise-planner-export", "version": 2}, "version"),
+        ({"format": "fitness-planner-export", "version": 2}, "version"),
     ],
 )
 def test_import_rejects_bad_files_and_changes_nothing(
@@ -495,7 +495,7 @@ def test_import_rejects_bad_files_and_changes_nothing(
 
 def test_import_accepts_a_byte_order_mark(client: TestClient, config: Config) -> None:
     sign_up(client, config)
-    body = "\ufeff" + json.dumps({"format": "exercise-planner-export", "version": 1})
+    body = "\ufeff" + json.dumps({"format": "fitness-planner-export", "version": 1})
     r = client.post(
         "/api/import", content=body.encode(), headers={"Content-Type": "application/json"}
     )
@@ -537,7 +537,7 @@ def test_import_rejects_invalid_utf8(client: TestClient, config: Config) -> None
 
 
 def test_create_app_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
-    from exercise_planner_api.app import create_app_from_env
+    from fitness_planner_api.app import create_app_from_env
 
     monkeypatch.setenv("PUBLIC_ORIGIN", ORIGIN)
     monkeypatch.setenv("DATA_DIR", str(tmp_path))

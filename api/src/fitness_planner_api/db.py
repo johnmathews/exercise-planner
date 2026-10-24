@@ -109,7 +109,7 @@ def _use_wal(conn: sqlite3.Connection, attempts: int = 50) -> None:
 def migrate(conn: sqlite3.Connection) -> None:
     """Bring the schema to SCHEMA_VERSION; each step and its version bump commit together.
 
-    The version is read under the write lock, so the API and `ep-admin` starting at the same time
+    The version is read under the write lock, so the API and `fp-admin` starting at the same time
     cannot both apply a step.
     """
     _use_wal(conn)

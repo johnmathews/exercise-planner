@@ -183,7 +183,7 @@ wheels = [
 ]
 
 [[package]]
-name = "exercise-planner-api"
+name = "fitness-planner-api"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

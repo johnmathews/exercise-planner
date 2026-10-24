@@ -1,7 +1,7 @@
 [project]
-name = "exercise-planner-api"
+name = "fitness-planner-api"
 version = "0.1.0"
-description = "Accounts and sync for the exercise planner"
+description = "Accounts and sync for the fitness planner"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "argon2-cffi>=25.1",
@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ep-admin = "exercise_planner_api.cli:main"
+fp-admin = "fitness_planner_api.cli:main"
 
 [dependency-groups]
 dev = [
@@ -31,7 +31,7 @@ addopts = "-q --strict-markers"
 filterwarnings = ["error"]
 
 [tool.coverage.run]
-source = ["exercise_planner_api"]
+source = ["fitness_planner_api"]
 branch = true
 
 [tool.coverage.report]
@@ -44,7 +44,7 @@ exclude_also = ['if __name__ == "__main__":']
 strict = true
 python_version = "3.13"
 mypy_path = "src"
-packages = ["exercise_planner_api", "tests"]
+packages = ["fitness_planner_api", "tests"]
 
 [tool.ruff]
 line-length = 100

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from exercise_planner_api.db import SCHEMA_VERSION, connect, migrate, transaction
+from fitness_planner_api.db import SCHEMA_VERSION, connect, migrate, transaction
 
 
 def test_migrates_a_fresh_database_once(tmp_path: Path) -> None:
@@ -69,7 +69,7 @@ def test_transaction_commits_or_rolls_back(conn: sqlite3.Connection) -> None:
 def test_a_failed_migration_leaves_the_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from exercise_planner_api import db
+    from fitness_planner_api import db
 
     c = connect(tmp_path / "f.db")
     monkeypatch.setattr(db, "MIGRATIONS", ["CREATE TABLE a (x); CREATE TABLE a (x);"])
@@ -125,9 +125,9 @@ class FakeConn:
 
 
 def test_wal_switch_retries_while_locked(monkeypatch: pytest.MonkeyPatch) -> None:
-    from exercise_planner_api import db
+    from fitness_planner_api import db
 
-    monkeypatch.setattr("exercise_planner_api.db.time.sleep", lambda _: None)
+    monkeypatch.setattr("fitness_planner_api.db.time.sleep", lambda _: None)
     fake = FakeConn(failures=3)
     db._use_wal(fake)  # type: ignore[arg-type]
     assert fake.calls == 4

@@ -2,9 +2,9 @@ import sqlite3
 
 import pytest
 
-from exercise_planner_api import auth
-from exercise_planner_api.cli import main
-from exercise_planner_api.config import Config
+from fitness_planner_api import auth
+from fitness_planner_api.cli import main
+from fitness_planner_api.config import Config
 
 from .conftest import ORIGIN, Clock
 

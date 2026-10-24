@@ -224,11 +224,11 @@ describe('the first-login import prompt', () => {
     await button('Not mine').trigger('click')
     expect(marker()).toBe('"dismissed"')
     // Alice signs out in another tab and bob signs in: he gets his own question.
-    localStorage.setItem('exercise-planner-session-v1', JSON.stringify({ user: 'bob' }))
+    localStorage.setItem('fitness-planner-session-v1', JSON.stringify({ user: 'bob' }))
     api.signedIn = 'bob'
     window.dispatchEvent(
       new StorageEvent('storage', {
-        key: 'exercise-planner-session-v1',
+        key: 'fitness-planner-session-v1',
         storageArea: localStorage,
       }),
     )

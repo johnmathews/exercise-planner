@@ -1,7 +1,7 @@
 {
   "description": "Numbers round as JavaScript's Math.round does: halves go up, never to even. reps 2.5 is 3, target 3.5 is 4, sets 1.5 is 2, dailyPick 4.5 is 5, target 0.5 is 1, reps -2.5 is -2 then floors to 0. Weight rounds after scaling by 100: 0.125 is 0.13 (Python's round() would give 0.12), and 1.005 is 1 because 1.005 * 100 is 100.49999999999999.",
   "input": {
-    "format": "exercise-planner-export",
+    "format": "fitness-planner-export",
     "version": 1,
     "exercise": {
       "plans": {

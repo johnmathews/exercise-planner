@@ -28,7 +28,7 @@ const THEME_NAMES: Record<Theme, string> = { system: 'System', light: 'Light', d
 
 const IMPORT_ERRORS: Record<ParseError | 'read', string> = {
   json: 'That file isn’t valid JSON.',
-  format: 'That file isn’t an Exercise Planner export.',
+  format: 'That file isn’t an Fitness Planner export.',
   version: 'That export comes from a newer version of the app.',
   read: 'That file couldn’t be read.',
 }

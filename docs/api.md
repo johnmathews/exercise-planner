@@ -21,7 +21,7 @@ scoped by `user_id`, and no endpoint reads another user's data.
 | `data.py`     | reading and writing plans, ticks and settings; import, export |
 | `app.py`      | the HTTP layer: routes, the write checks, error mapping       |
 | `backup.py`   | the daily `VACUUM INTO` copy                                  |
-| `cli.py`      | `ep-admin`                                                    |
+| `cli.py`      | `fp-admin`                                                    |
 
 ## 2. Data model
 
@@ -92,10 +92,10 @@ the client shows.
 
 ## 4. Accounts and sessions
 
-- **No sign-up.** `ep-admin invite <username>` mints a single-use link,
+- **No sign-up.** `fp-admin invite <username>` mints a single-use link,
   `$PUBLIC_ORIGIN/#/invite/<token>`, valid for 7 days. The person opens it and chooses a password
   (10 to 256 characters). The username is fixed by the invite: 1 to 32 letters, digits, `.`, `_`
-  or `-`, unique regardless of case. Inviting a name that already exists fails; use `reset`. `ep-admin reset <username>` mints a
+  or `-`, unique regardless of case. Inviting a name that already exists fails; use `reset`. `fp-admin reset <username>` mints a
   reset link the same way, valid for 24 hours. Using it ends every session of that user and clears
   any lockout. Minting a new link revokes the earlier unused links of the same kind for that
   username (a new invite leaves a reset link alone, and the reverse). The token travels
@@ -116,20 +116,20 @@ the client shows.
 - **Sessions** are 32 random bytes in an `HttpOnly; Secure; SameSite=Lax; Path=/` cookie named
   `__Host-session`. They last 90 days from the last use: a request more than a day after the last
   refresh moves the expiry forward and re-sends the cookie. Logout ends one session.
-  `ep-admin revoke-sessions <username>` and a reset end them all. A disabled user's sessions stop
+  `fp-admin revoke-sessions <username>` and a reset end them all. A disabled user's sessions stop
   working at once.
 
 ## 5. Admin CLI
 
-`ep-admin` runs in the API container against the same database:
+`fp-admin` runs in the API container against the same database:
 
 ```sh
-docker compose exec fitness-api ep-admin invite alice     # prints the invite link
-docker compose exec fitness-api ep-admin reset alice      # prints a reset link
-docker compose exec fitness-api ep-admin users            # username, created, disabled, sessions
-docker compose exec fitness-api ep-admin disable alice    # blocks login and ends sessions
-docker compose exec fitness-api ep-admin enable alice
-docker compose exec fitness-api ep-admin revoke-sessions alice
+docker compose exec fitness-api fp-admin invite alice     # prints the invite link
+docker compose exec fitness-api fp-admin reset alice      # prints a reset link
+docker compose exec fitness-api fp-admin users            # username, created, disabled, sessions
+docker compose exec fitness-api fp-admin disable alice    # blocks login and ends sessions
+docker compose exec fitness-api fp-admin enable alice
+docker compose exec fitness-api fp-admin revoke-sessions alice
 ```
 
 ## 6. Configuration
@@ -155,7 +155,7 @@ Reviewed and kept on purpose, for a service with a handful of invited users:
 - **Lockout reveals and can block a username.** Five wrong passwords lock a real account, but an
   unknown name never locks, so guessing shows which names exist. The same five guesses every 15
   minutes keep someone out. The lock is per account because the LAN port means no client IP can
-  be trusted. `ep-admin reset` clears it.
+  be trusted. `fp-admin reset` clears it.
 - **Sessions have no absolute lifetime.** A session used at least every 90 days lasts
   indefinitely. Logout, `revoke-sessions`, a reset and `disable` all end it.
 - **A signed-in user can grow their own data without a cap.** Week keys only need the
@@ -193,7 +193,7 @@ uv run coverage run -m pytest && uv run coverage report   # fails under 98%
 uv run ruff check . && uv run ruff format --check .
 uv run mypy
 PUBLIC_ORIGIN=http://localhost:5173 COOKIE_SECURE=false DATA_DIR=./.data \
-  uv run uvicorn --factory exercise_planner_api.app:create_app_from_env --port 8000
+  uv run uvicorn --factory fitness_planner_api.app:create_app_from_env --port 8000
 ```
 
 Tests sit in `api/tests/`:
@@ -205,6 +205,6 @@ Tests sit in `api/tests/`:
 - `test_auth.py`: hashing one at a time and the busy queue, login, lockout and its window and
   races, sessions sliding and expiring, invite and reset links, races between redemptions.
 - `test_db.py`, `test_config.py`, `test_backup.py`, `test_cli.py`: migrations (including racing
-  ones and the WAL switch), configuration from the environment, daily copies, `ep-admin`.
+  ones and the WAL switch), configuration from the environment, daily copies, `fp-admin`.
 - `conftest.py` gives each test a temporary database, a controllable clock and a cheap hasher;
   `fixtures.py` reads `fixtures/transfer/`.

@@ -8,10 +8,10 @@ import pytest
 from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
 
-from exercise_planner_api import auth
-from exercise_planner_api.app import create_app
-from exercise_planner_api.config import Config
-from exercise_planner_api.db import connect, migrate
+from fitness_planner_api import auth
+from fitness_planner_api.app import create_app
+from fitness_planner_api.config import Config
+from fitness_planner_api.db import connect, migrate
 
 ORIGIN = "https://testserver"
 START = 1_792_742_400  # 2026-10-23 08:00 UTC

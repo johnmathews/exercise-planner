@@ -1,4 +1,4 @@
-# Exercise Planner
+# Fitness Planner
 
 > Purpose
 >
@@ -48,8 +48,8 @@ Prerequisites: Node `22.18+` or `24.12+`, and **npm 11**. Node 24.12+ ships npm 
 upgrade npm first, because the bundled npm 10.9 crashes while resolving this project's dependencies.
 
 ```bash
-git clone https://github.com/johnmathews/exercise-planner.git
-cd exercise-planner
+git clone https://github.com/johnmathews/fitness-planner.git
+cd fitness-planner
 npm install -g npm@11      # Node 22 only; or run: npx -y npm@11 ci
 npm ci
 npm run dev                # http://localhost:5173
@@ -61,8 +61,8 @@ with `PUBLIC_ORIGIN` set to the dev server's origin, and mint yourself an invite
 ```bash
 cd api && uv sync
 export PUBLIC_ORIGIN=http://localhost:5173 COOKIE_SECURE=false DATA_DIR=./.data
-uv run ep-admin invite you                      # prints http://localhost:5173/#/invite/…
-uv run uvicorn --factory exercise_planner_api.app:create_app_from_env --port 8000
+uv run fp-admin invite you                      # prints http://localhost:5173/#/invite/…
+uv run uvicorn --factory fitness_planner_api.app:create_app_from_env --port 8000
 ```
 
 Vite forwards `/api` to `http://127.0.0.1:8000` (set `API_URL` to change it). Open the invite link
@@ -88,10 +88,10 @@ Two containers: the app (static files on nginx, port **8080**) and the API (port
 nginx forwarding `/api/` to the API so the browser sees one origin. CI publishes both as
 multi-architecture images (`linux/amd64` and `linux/arm64`) to GHCR on every push to `main`:
 
-| Image                                      | Tags                        |
-| ------------------------------------------ | --------------------------- |
-| `ghcr.io/johnmathews/exercise-planner`     | `latest`, `sha-<short sha>` |
-| `ghcr.io/johnmathews/exercise-planner-api` | `latest`, `sha-<short sha>` |
+| Image                                     | Tags                        |
+| ----------------------------------------- | --------------------------- |
+| `ghcr.io/johnmathews/fitness-planner`     | `latest`, `sha-<short sha>` |
+| `ghcr.io/johnmathews/fitness-planner-api` | `latest`, `sha-<short sha>` |
 
 Run them with Docker Compose. The API service must be named `fitness-api`, since that is the
 host `nginx.conf` forwards to:
@@ -99,12 +99,12 @@ host `nginx.conf` forwards to:
 ```yaml
 services:
   web:
-    image: ghcr.io/johnmathews/exercise-planner:latest
+    image: ghcr.io/johnmathews/fitness-planner:latest
     ports:
       - '8080:8080'
     restart: unless-stopped
   fitness-api:
-    image: ghcr.io/johnmathews/exercise-planner-api:latest
+    image: ghcr.io/johnmathews/fitness-planner-api:latest
     environment:
       PUBLIC_ORIGIN: https://fitness.example.com # the address people open
     volumes:
@@ -124,7 +124,7 @@ Then start both, mint the first account, and open the link it prints:
 
 ```bash
 docker compose up -d
-docker compose exec fitness-api ep-admin invite <name>
+docker compose exec fitness-api fp-admin invite <name>
 ```
 
 Serve it over HTTPS: the session cookie is `Secure`. For a plain-http trial, set
@@ -135,7 +135,7 @@ Serve it over HTTPS: the session cookie is `Secure`. For a plain-http trial, set
 end to end.
 
 [docs/deployment.md](docs/deployment.md) covers the images, nginx and CI, and
-[docs/api.md](docs/api.md) the API, accounts, backups and `ep-admin`.
+[docs/api.md](docs/api.md) the API, accounts, backups and `fp-admin`.
 
 ## 4. Documentation
 

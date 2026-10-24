@@ -62,7 +62,7 @@ jobs:
         if: matrix.name == 'api'
         run: |
           docker run --rm --platform linux/arm64 api-smoke:arm64 \
-            python -c "import argon2, pydantic_core, exercise_planner_api.app; print('ok')"
+            python -c "import argon2, pydantic_core, fitness_planner_api.app; print('ok')"
 
   # Both images together behind nginx, as production runs them: sign-up, writes and reads through
   # the /api proxy, the write guard, and nginx still serving the app with the API stopped.
@@ -89,10 +89,10 @@ jobs:
         include:
           - name: web
             context: .
-            image: ghcr.io/johnmathews/exercise-planner
+            image: ghcr.io/johnmathews/fitness-planner
           - name: api
             context: api
-            image: ghcr.io/johnmathews/exercise-planner-api
+            image: ghcr.io/johnmathews/fitness-planner-api
     steps:
       - uses: actions/checkout@v7
         with:

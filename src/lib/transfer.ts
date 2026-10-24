@@ -19,7 +19,9 @@ import {
  * The export file: what Settings → Export downloads and Import… reads. It is also the contract for
  * the API's export and import, which is why the cases live in `fixtures/transfer/`.
  */
-export const EXPORT_FORMAT = 'exercise-planner-export'
+export const EXPORT_FORMAT = 'fitness-planner-export'
+/** Files exported before the app was renamed carry this format; they import as if current. */
+export const OLD_EXPORT_FORMAT = 'exercise-planner-export'
 export const EXPORT_VERSION = 1
 
 export type ExportData = {
@@ -72,7 +74,12 @@ export function parseExport(text: string): ParseResult {
   // parseJson maps a syntax error to null, and so does the literal `null`; both are "not JSON".
   const parsed = parseJson(text)
   if (parsed === null) return { ok: false, error: 'json' }
-  if (!isRecord(parsed) || parsed.format !== EXPORT_FORMAT) return { ok: false, error: 'format' }
+  if (
+    !isRecord(parsed) ||
+    (parsed.format !== EXPORT_FORMAT && parsed.format !== OLD_EXPORT_FORMAT)
+  ) {
+    return { ok: false, error: 'format' }
+  }
   if (parsed.version !== EXPORT_VERSION) return { ok: false, error: 'version' }
   return {
     ok: true,
@@ -139,7 +146,7 @@ export function mergeSettings(
 }
 
 export function exportFilename(now: Date): string {
-  return `exercise-planner-${dateKey(now)}.json`
+  return `fitness-planner-${dateKey(now)}.json`
 }
 
 /** Save the export through a temporary link; the browser names the file `exportFilename(now)`. */

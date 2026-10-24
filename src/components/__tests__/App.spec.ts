@@ -315,7 +315,7 @@ describe('export and import', () => {
   })
 
   const EXPORT = {
-    format: 'exercise-planner-export',
+    format: 'fitness-planner-export',
     version: 1,
     exercise: {
       plans: {
@@ -368,11 +368,11 @@ describe('export and import', () => {
     await button('Export').trigger('click')
     expect(click).toHaveBeenCalledOnce()
     expect((click.mock.contexts[0] as HTMLAnchorElement).download).toBe(
-      'exercise-planner-2026-10-23.json',
+      'fitness-planner-2026-10-23.json',
     )
     const file = JSON.parse(await blob!.text())
     expect(file).toMatchObject({
-      format: 'exercise-planner-export',
+      format: 'fitness-planner-export',
       version: 1,
       settings: { accent: '#30d158', dailyPick: 3 },
     })
@@ -434,7 +434,7 @@ describe('export and import', () => {
     await wrapper.get('button[aria-label="Blue"]').trigger('click')
     await choose(
       jsonFile({
-        format: 'exercise-planner-export',
+        format: 'fitness-planner-export',
         version: 1,
         exercise: {
           plans: { '2026-10-12': [] },
@@ -488,13 +488,13 @@ describe('export and import', () => {
     await button('Cancel').trigger('click')
     expect(wrapper.find('[data-testid="import-summary"]').exists()).toBe(false)
     expect(rowCells('Squats')[0]!.attributes('aria-pressed')).toBe('false')
-    expect(localStorage.getItem('exercise-planner-v2')).toBeNull()
+    expect(localStorage.getItem('fitness-planner-v2')).toBeNull()
   })
 
   it('says so when the file adds nothing', async () => {
     mountApp()
     await openSettings()
-    await choose(jsonFile({ format: 'exercise-planner-export', version: 1 }))
+    await choose(jsonFile({ format: 'fitness-planner-export', version: 1 }))
     expect(wrapper.get('[role="status"]').text()).toBe(
       'Nothing new: everything in that file is already here.',
     )
@@ -503,10 +503,10 @@ describe('export and import', () => {
 
   it.each([
     ['not JSON', new File(['{oops'], 'x.json'), 'That file isn’t valid JSON.'],
-    ['another format', jsonFile({ plans: {} }), 'That file isn’t an Exercise Planner export.'],
+    ['another format', jsonFile({ plans: {} }), 'That file isn’t an Fitness Planner export.'],
     [
       'a newer version',
-      jsonFile({ format: 'exercise-planner-export', version: 2 }),
+      jsonFile({ format: 'fitness-planner-export', version: 2 }),
       'That export comes from a newer version of the app.',
     ],
   ])('rejects %s with an inline error and changes nothing', async (_, file, message) => {
@@ -551,9 +551,9 @@ describe('export and import with the sample data', () => {
   const sample = readFixture<Record<string, unknown>>('sample/export.json')
 
   type Tracked = { plans: object; log: object }
-  const exercise = storage['exercise-planner-v2'] as Tracked
-  const diet = storage['exercise-planner-diet-v2'] as Tracked
-  const { accent, dailyPick } = storage['exercise-planner-settings-v1'] as {
+  const exercise = storage['fitness-planner-v2'] as Tracked
+  const diet = storage['fitness-planner-diet-v2'] as Tracked
+  const { accent, dailyPick } = storage['fitness-planner-settings-v1'] as {
     accent: string
     dailyPick: number
   }
@@ -638,7 +638,7 @@ describe('export and import with the sample data', () => {
     expect({ plans: server.diet.plans, log: server.diet.log }).toMatchObject(diet)
     expect(server.settings).toEqual({ accent, dailyPick })
     // The theme is per device, so it never left this browser.
-    expect(localStorage.getItem('exercise-planner-settings-v1')).toBeNull()
+    expect(localStorage.getItem('fitness-planner-settings-v1')).toBeNull()
   })
 })
 
@@ -697,7 +697,7 @@ describe('theme', () => {
     await themeButton('Dark').trigger('click')
     expect(isDarkClass()).toBe(true)
     expect(themeButton('Dark').attributes('aria-pressed')).toBe('true')
-    expect(JSON.parse(localStorage.getItem('exercise-planner-settings-v1')!).theme).toBe('dark')
+    expect(JSON.parse(localStorage.getItem('fitness-planner-settings-v1')!).theme).toBe('dark')
 
     await themeButton('Light').trigger('click')
     expect(isDarkClass()).toBe(false)

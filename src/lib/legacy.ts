@@ -73,7 +73,7 @@ function fromV1Only<T>(
  * (added, or nothing left to add) or `dismissed` ("Not mine"). Kept through sign-out, so the
  * answer holds for the next sign-in too.
  */
-export const IMPORT_MARKER_PREFIX = 'exercise-planner-import-v1:'
+export const IMPORT_MARKER_PREFIX = 'fitness-planner-import-v1:'
 export type ImportMarker = 'imported' | 'dismissed'
 
 export function readImportMarker(user: string): ImportMarker | null {

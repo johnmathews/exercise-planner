@@ -130,7 +130,7 @@ describe('buildExport', () => {
 
 describe('exportFilename', () => {
   it('names the file by the local date', () => {
-    expect(exportFilename(new Date(2026, 9, 24, 23, 59))).toBe('exercise-planner-2026-10-24.json')
+    expect(exportFilename(new Date(2026, 9, 24, 23, 59))).toBe('fitness-planner-2026-10-24.json')
   })
 })
 
@@ -148,7 +148,7 @@ describe('downloadExport', () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
       this: HTMLAnchorElement,
     ) {
-      expect(this.download).toBe('exercise-planner-2026-10-24.json')
+      expect(this.download).toBe('fitness-planner-2026-10-24.json')
       expect(this.href).toBe('blob:export')
       expect(this.isConnected).toBe(true)
     })

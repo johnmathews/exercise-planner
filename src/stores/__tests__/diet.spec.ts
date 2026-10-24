@@ -112,13 +112,13 @@ describe('diet store', () => {
 
   it('never reads or writes the diet keys from before accounts', async () => {
     const legacy = JSON.stringify({ foods: [{ id: 'z', name: 'Z', target: 2 }], log: {} })
-    localStorage.setItem('exercise-planner-diet-v1', legacy)
+    localStorage.setItem('fitness-planner-diet-v1', legacy)
     setActivePinia(createPinia())
     const d = useDietStore()
     expect(d.foods).toHaveLength(4)
     d.toggle('veg', 0)
     await nextTick()
-    expect(localStorage.getItem('exercise-planner-diet-v1')).toBe(legacy)
+    expect(localStorage.getItem('fitness-planner-diet-v1')).toBe(legacy)
     expect(stored(DIET_KEY)).toBeNull()
   })
 })
