@@ -5,16 +5,20 @@ on:
     branches: [main]
   pull_request:
 
-env:
-  IMAGE: ghcr.io/johnmathews/exercise-planner
-
 jobs:
-  # Pull requests prove the Dockerfile builds, with a read-only token.
+  # Pull requests prove both Dockerfiles build, with a read-only token.
   build:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    strategy:
+      matrix:
+        include:
+          - name: web
+            context: .
+          - name: api
+            context: api
     steps:
       - uses: actions/checkout@v7
         with:
@@ -22,10 +26,30 @@ jobs:
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
-          context: .
+          context: ${{ matrix.context }}
           platforms: linux/amd64,linux/arm64
           push: false
-          cache-from: type=gha
+          cache-from: type=gha,scope=${{ matrix.name }}
+      # The API image is built without QEMU (target wheels on the native platform), so prove each
+      # architecture actually runs: amd64 serves /api/healthz, arm64 imports its native modules.
+      - name: Smoke-test the amd64 API image
+        if: matrix.name == 'api'
+        run: |
+          docker buildx build --platform linux/amd64 --load -t api-smoke:amd64 \
+            --cache-from type=gha,scope=api api
+          docker run -d --name api -p 8000:8000 -e PUBLIC_ORIGIN=https://smoke.example api-smoke:amd64
+          for _ in $(seq 1 30); do curl -sf http://127.0.0.1:8000/api/healthz && exit 0; sleep 1; done
+          docker logs api
+          exit 1
+      - uses: docker/setup-qemu-action@v4
+        if: matrix.name == 'api'
+      - name: Smoke-test the arm64 API image
+        if: matrix.name == 'api'
+        run: |
+          docker buildx build --platform linux/arm64 --load -t api-smoke:arm64 \
+            --cache-from type=gha,scope=api api
+          docker run --rm --platform linux/arm64 api-smoke:arm64 \
+            python -c "import argon2, pydantic_core, exercise_planner_api.app; print('ok')"
 
   # Only pushes to main get packages: write and publish to GHCR.
   publish:
@@ -34,6 +58,15 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        include:
+          - name: web
+            context: .
+            image: ghcr.io/johnmathews/exercise-planner
+          - name: api
+            context: api
+            image: ghcr.io/johnmathews/exercise-planner-api
     steps:
       - uses: actions/checkout@v7
         with:
@@ -47,16 +80,16 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.IMAGE }}
+          images: ${{ matrix.image }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha
       - uses: docker/build-push-action@v7
         with:
-          context: .
+          context: ${{ matrix.context }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

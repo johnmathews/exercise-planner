@@ -1,0 +1,20 @@
+# Local runs of both images: the app on http://localhost:8083 and the API on http://localhost:8000.
+# Production runs from the home-server repo's compose file; this one is for development and CI.
+services:
+  web:
+    build: .
+    ports:
+      - "8083:8080"
+
+  fitness-api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      PUBLIC_ORIGIN: http://localhost:8083
+      COOKIE_SECURE: "false"
+    volumes:
+      - api-data:/data
+
+volumes:
+  api-data:

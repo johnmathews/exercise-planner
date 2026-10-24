@@ -7,7 +7,8 @@
 
 ## 1. Overview
 
-A static Vue 3 SPA with no backend. Two Pinia stores hold all state and write it back to
+A Vue 3 SPA. The API service in `api/` ([api.md](api.md)) holds accounts and synced data, but the
+client does not call it yet. Until then the app runs without a backend. Two Pinia stores hold all state and write it back to
 `localStorage`: `planner` (exercise plans, the log, the visible week, settings, the mode) and `diet`
 (food plans and their log), which takes its week from `planner`. Both track the same thing, a tick
 per day against a weekly goal, through the pure helpers in `src/lib/tracker.ts`. `src/lib/plans.ts`

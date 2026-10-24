@@ -1,0 +1,58 @@
+[project]
+name = "exercise-planner-api"
+version = "0.1.0"
+description = "Accounts and sync for the exercise planner"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "argon2-cffi>=25.1",
+    "fastapi>=0.160",
+    "uvicorn>=0.54",
+]
+
+[project.scripts]
+ep-admin = "exercise_planner_api.cli:main"
+
+[dependency-groups]
+dev = [
+    "coverage>=7.17",
+    "httpx2>=2.16.0",
+    "mypy>=2.4",
+    "pytest>=9.1",
+    "ruff>=0.17",
+]
+
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["exercise_planner_api"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 98
+exclude_also = ['if __name__ == "__main__":']
+
+[tool.mypy]
+strict = true
+python_version = "3.13"
+mypy_path = "src"
+packages = ["exercise_planner_api", "tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF", "ANN"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "ANN401"]

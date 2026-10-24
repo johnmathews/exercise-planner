@@ -24,3 +24,13 @@ __screenshots__/
 *.pem
 credentials.json
 *.secret
+
+# Python (api/)
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+api/.data/

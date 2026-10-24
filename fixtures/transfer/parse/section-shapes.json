@@ -1,0 +1,17 @@
+{
+  "description": "A section whose plans or log is not an object, or whose plan for a week is not a list, contributes nothing for that part.",
+  "input": {
+    "format": "exercise-planner-export",
+    "version": 1,
+    "exercise": { "plans": "x", "log": [1] },
+    "diet": { "plans": { "2026-10-19": { "veg": 1 } }, "log": "y" }
+  },
+  "expected": {
+    "ok": true,
+    "data": {
+      "exercise": { "plans": {}, "log": {} },
+      "diet": { "plans": {}, "log": {} },
+      "settings": null
+    }
+  }
+}

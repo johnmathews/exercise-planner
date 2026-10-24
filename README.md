@@ -104,7 +104,8 @@ with an empty log, and clearing site data erases it. No server-side copy exists.
 | ----------------------------------------------------------------------------- | ---------------------------------------------------- |
 | [docs/architecture.md](docs/architecture.md)                                  | Components, stores, storage format, design decisions |
 | [docs/development.md](docs/development.md)                                    | Toolchain, scripts, conventions, tests               |
-| [docs/deployment.md](docs/deployment.md)                                      | Docker image, nginx, CI, GHCR publishing             |
+| [docs/deployment.md](docs/deployment.md)                                      | Docker images, nginx, CI, GHCR publishing            |
+| [docs/api.md](docs/api.md)                                                    | The API service: endpoints, accounts, CLI, backups   |
 | [design_handoff_exercise_planner/](design_handoff_exercise_planner/README.md) | The original design spec and HTML prototype          |
 
 Development history lives in [`journal/`](journal/).
