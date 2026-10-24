@@ -93,8 +93,7 @@ exercise's history stays in `log` without inflating the numbers.
 (replaces name, sets, reps, per-side and weight, keeping the id, goal and history; `false` for an
 empty name or an id not in the week), `removeExercise`, `copyToNextWeek`, `setConfigMode`,
 `prevWeek`, `nextWeek`, `thisWeek`, `refreshNow`, `setAccent`, `changeDailyPick` (clamps 1–8),
-`setTheme`, `importData` (merges an export into the plans, log and settings; see §4),
-`savedSettings` (the accent and daily pick, or null while the user has none of their own), `adopt`
+`setTheme`, `savedSettings` (the accent and daily pick, or null while the user has none of their own), `adopt`
 (replace the data and settings wholesale), `adoptWeek` (replace one week's plan) and `clear` (forget
 the user on sign-out, keeping the theme). The module also exports `exerciseDetails`, which gives the chips under a name:
 "3 × 10 reps" (or "10 reps / set" without sets, "3 sets" without reps, "8 each side" in place of
@@ -104,7 +103,7 @@ the user on sign-out, keeping the theme). The module also exports `exerciseDetai
 store like the planner's. It reads `planner.weekKey`, so week navigation moves both
 sections. It derives `foods`, `dayCounts`, `grandTotal`, `goalsMet` and `nextWeekHasPlan`, and
 offers `isEaten`, `totalFor`, `toggle`, `changeTarget` (0–7), `addFood` (goal 3, `false` for an
-empty name), `removeFood`, `copyToNextWeek`, `importData`, `adopt`, `adoptWeek` and `clear`. Food goals work
+empty name), `removeFood`, `copyToNextWeek`, `adopt`, `adoptWeek` and `clear`. Food goals work
 like exercise goals (met once the count reaches a non-zero goal); foods have no daily target.
 
 The planner writes only the theme, merged into whatever `exercise-planner-settings-v1` already holds.
@@ -123,8 +122,8 @@ with storage blocked or full the app keeps working in memory.
 | `exercise-planner-v1`, `-diet-v1`   | the single-list format from before weekly plans              | never   |
 
 Since accounts, nothing writes the keys from before them. They stay because they hold what a browser
-recorded locally, which the first-login import (W4) reads with the parsing, migration and validation
-below. Signing out does not remove them. Browsers isolate storage per origin, so a cache belongs to
+recorded locally, which the first-login import (§7) reads with the parsing, migration and
+validation below (`readLegacyData`, `src/lib/legacy.ts`). Signing out does not remove them. Browsers isolate storage per origin, so a cache belongs to
 one origin and one user.
 
 **Migration.** Before weekly plans, one list served every week: `{ exercises, log }` under
@@ -174,26 +173,28 @@ another `format`, or has a `version` other than 1. It validates the rest with th
 as storage, so a hand-edited file loads the way a hand-edited `localStorage` value would. Missing
 `settings`, or settings that are not an object, mean "no settings".
 
-An import **merges and never deletes** (`mergeTracked`, `mergeSettings`):
+An import **merges and never deletes** (`mergeTracked`, `mergeSettings`; the API's `import_data`
+applies the same rules):
 
 - A week that already has a plan keeps it; a week with no plan takes the file's.
 - Ticks are OR-ed per week, item and day, so an import can add ticks but never clears one.
-- The file's accent and daily pick apply only when the user has no settings of their own yet: none
-  on the server, and none changed or imported since. The planner tracks this in `savedSettings`
-  rather than reading any key, so it holds when storage is blocked, and an import that applies
-  settings counts as saving them, so a second import does not offer them again.
+- The file's accent and daily pick apply only when the account has no settings of their own yet.
 
-Signed in, an import merges into the stores like any other change, and the sync store sends what
-it added: a plan write per new week and a tick write per new tick. The confirm step names how many
-weeks and ticks the file adds (`mergeSummary`) before anything is
-written. It is computed from the current state, so it stays right if another tab or a settings
+Confirming sends the file to `POST /api/import` (`sync.importFile`): the server merges it against
+the account's real state in one transaction, and the app then reads the account afresh (after any
+read already in flight, which predates the import). Local writes still queued go out first, so the
+server merges against everything this device has; if they cannot be sent, nothing is imported. When
+the import cannot be done, the popover says why (offline, a server failure, an ended session) and
+keeps the file ready to try again. The confirm step names how many weeks and ticks the file adds
+(`mergeSummary`, through `useImportSummary`, which the first-login prompt shares) before anything
+is written. It is computed from the current state, so it stays right if another tab or a settings
 change lands while it is open. Importing the same file twice adds nothing the second time. Adding a week can change what
 an unplanned week carries forward from (§2). The import took its history from the file, so that is
 the intended result.
 
 `fixtures/transfer/` holds the parse and merge cases as JSON, each with its expected result.
 `src/lib/__tests__/transfer.spec.ts` runs every case. The format is the contract for the API's
-import and export as well, so the API's tests will run the same files.
+import and export as well: the API's tests (`api/tests/test_parity.py`) run the same files.
 
 ## 5. Decisions beyond the design
 
@@ -327,6 +328,29 @@ as an empty plan.
 `SyncStatus` shows "Loading your data…" before the first state arrives. Offline, it shows a retry
 button and how many changes are waiting. Conflict and refused-write notices stay until dismissed.
 It sits in a live region that is always present, so screen readers announce each message.
+
+**The first-login import.** Before accounts, each browser kept its own log under the keys in §4.
+After sign-in, once the app has read the account from the server in this session (`sync.fresh`; a
+cached copy could be stale), `ImportPrompt` reads those keys (`readLegacyData`). If they hold
+anything the account lacks, it offers to add it, naming what it would add:
+
+- **Add to my account** sends it through `importFile`, the same server merge as a file import, so
+  nothing in the account is replaced or deleted.
+- **Not mine** remembers the answer for this user on this browser.
+- **Later** asks again on the next load.
+
+The answer is kept in `exercise-planner-import-v1:<user>` (`imported` or `dismissed`), which signing
+out leaves in place. If the account already holds everything the keys do (imported from another
+device, say), the prompt records `imported` and never appears. Only an accent or daily pick in the
+settings key counts as data: every device still writes its theme there. The old keys are never
+changed, so a browser shared by two people offers its log to each until each answers.
+
+The single-list format (v1) needs trimming first. The old app copied its one list onto every
+logged week and onto the current week, so the screen looked as before. Imported into an account,
+that copy on the current week would replace the account's own carried-forward plan for this week
+and later ones, and an empty list would empty them. So the import puts the list only on the weeks
+it was ticked in (on the current week only if it was never ticked), adds no plan for an empty list,
+and reads a damaged v1 key as nothing rather than as the default exercises.
 
 **Accepted limits.**
 

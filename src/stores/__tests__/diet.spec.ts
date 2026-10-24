@@ -122,27 +122,3 @@ describe('diet store', () => {
     expect(stored(DIET_KEY)).toBeNull()
   })
 })
-
-describe('diet importData', () => {
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(NOW)
-    localStorage.clear()
-    setActivePinia(createPinia())
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  it('merges food plans and ticks into the diet store only', () => {
-    const d = useDietStore()
-    d.importData({
-      plans: { '2026-10-19': [{ id: 'eggs', name: 'Eggs', target: 2 }] },
-      log: { '2026-10-19': { eggs: [true, false, false, false, false, false, false] } },
-    })
-    expect(d.foods.map((f) => f.name)).toEqual(['Eggs'])
-    expect(d.isEaten('eggs', 0)).toBe(true)
-    expect(usePlannerStore().log).toEqual({})
-  })
-})

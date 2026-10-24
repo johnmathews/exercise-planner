@@ -4,6 +4,8 @@
  * single-day ticks, settings, sessions and invite links. Controls let a test go offline, fail
  * a request, or hold replies back to provoke races.
  */
+import { mergeSummary, parseExport } from '@/lib/transfer'
+
 type Section = 'exercise' | 'diet'
 type Plan = { items: unknown[]; rev: number }
 type Settings = { accent: string; dailyPick: number }
@@ -168,6 +170,7 @@ export class FakeApi {
     }
     if (method === 'GET' && path === '/auth/me') return Response.json({ username: user })
     if (method === 'GET' && path === '/state') return Response.json(this.state(user!))
+    if (method === 'POST' && path === '/import') return this.import(a, body)
     if (method === 'PUT' && path === '/settings') {
       a.settings = { accent: String(body.accent), dailyPick: Number(body.dailyPick) }
       return Response.json(a.settings)
@@ -195,5 +198,33 @@ export class FakeApi {
       return Response.json({ days: maskToDays(week[id]) })
     }
     return error(404, 'not-found')
+  }
+
+  /** The API's merge: existing weeks keep their plan, ticks are OR-ed, settings only if none. */
+  private import(a: Account, body: unknown): Response {
+    const parsed = parseExport(JSON.stringify(body))
+    if (!parsed.ok) return Response.json({ error: parsed.error }, { status: 400 })
+    let weeks = 0
+    let ticks = 0
+    for (const section of ['exercise', 'diet'] as const) {
+      const incoming = parsed.data[section]
+      const existing = this.state(this.signedIn!) as Record<Section, { plans: object; log: object }>
+      const added = mergeSummary(existing[section] as never, incoming)
+      weeks += added.weeks
+      ticks += added.ticks
+      for (const [week, items] of Object.entries(incoming.plans)) {
+        a.plans[section][week] ??= { items, rev: 1 }
+      }
+      for (const [week, entries] of Object.entries(incoming.log)) {
+        const stored = (a.ticks[section][week] ??= {})
+        for (const [id, days] of Object.entries(entries)) {
+          const mask = days.reduce((m, on, i) => (on ? m | (1 << i) : m), 0)
+          stored[id] = (stored[id] ?? 0) | mask
+        }
+      }
+    }
+    const settings = parsed.data.settings !== null && a.settings === null
+    if (settings) a.settings = parsed.data.settings
+    return Response.json({ weeks, ticks, settings })
   }
 }

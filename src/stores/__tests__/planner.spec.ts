@@ -408,7 +408,7 @@ describe('exercise sets', () => {
   })
 })
 
-describe('importData', () => {
+describe('savedSettings', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(NOW)
@@ -421,48 +421,7 @@ describe('importData', () => {
     vi.restoreAllMocks()
   })
 
-  const squats = { id: 'sq', name: 'Squats', reps: 15, target: 4 }
-
-  it('merges plans and ticks, keeping what was here', async () => {
-    const s = usePlannerStore()
-    s.toggle('pu', 0)
-    s.importData(
-      {
-        plans: { '2026-10-19': [squats], '2026-10-12': [squats] },
-        log: {
-          '2026-10-19': { pu: [false, true, false, false, false, false, false] },
-          '2026-10-12': { sq: [true, false, false, false, false, false, false] },
-        },
-      },
-      null,
-    )
-    await nextTick()
-    // This week already had its own plan (the tick gave it one), so it keeps the defaults.
-    expect(s.exercises.map((e) => e.id)).toEqual(['pu', 'pl', 'sq', 'be', 'kh'])
-    expect(s.isDone('pu', 0) && s.isDone('pu', 1)).toBe(true)
-    expect(s.plans['2026-10-12']).toEqual([squats])
-    expect(s.log).toHaveProperty(['2026-10-12', 'sq', 0], true)
-  })
-
-  it('applies the file’s settings only when none are saved', async () => {
-    const s = usePlannerStore()
-    expect(s.savedSettings()).toBeNull()
-    s.importData({ plans: {}, log: {} }, { accent: '#0a84ff', dailyPick: 5 })
-    await nextTick()
-    expect([s.accent, s.dailyPick]).toEqual(['#0a84ff', 5])
-    expect(s.savedSettings()).toEqual({ accent: '#0a84ff', dailyPick: 5 })
-    s.importData({ plans: {}, log: {} }, { accent: '#bf5af2', dailyPick: 2 })
-    await nextTick()
-    expect([s.accent, s.dailyPick]).toEqual(['#0a84ff', 5])
-  })
-
-  it('counts imported settings as saved even when they equal the defaults', () => {
-    const s = usePlannerStore()
-    s.importData({ plans: {}, log: {} }, { accent: '#30d158', dailyPick: 3 })
-    expect(s.savedSettings()).toEqual({ accent: '#30d158', dailyPick: 3 })
-  })
-
-  it('keeps settings changed in memory when storage is blocked', async () => {
+  it('is tracked in memory, so blocked storage cannot hide a change', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked')
     })
@@ -470,35 +429,23 @@ describe('importData', () => {
       throw new Error('blocked')
     })
     const s = usePlannerStore()
+    expect(s.savedSettings()).toBeNull()
     s.setAccent('#0a84ff')
-    await nextTick()
-    s.importData({ plans: {}, log: {} }, { accent: '#bf5af2', dailyPick: 5 })
-    expect([s.accent, s.dailyPick]).toEqual(['#0a84ff', 3])
+    expect(s.savedSettings()).toEqual({ accent: '#0a84ff', dailyPick: 3 })
   })
 
-  it('treats adopted settings as saved', () => {
+  it('treats adopted settings as saved, and none adopted as unsaved', () => {
     const s = usePlannerStore()
     s.adopt({ plans: {}, log: {} }, { accent: '#ff9f0a', dailyPick: 2 })
-    s.importData({ plans: {}, log: {} }, { accent: '#bf5af2', dailyPick: 5 })
-    expect([s.accent, s.dailyPick]).toEqual(['#ff9f0a', 2])
+    expect(s.savedSettings()).toEqual({ accent: '#ff9f0a', dailyPick: 2 })
+    s.adopt({ plans: {}, log: {} }, null)
+    expect(s.savedSettings()).toBeNull()
   })
 
-  it('can change what an unplanned week carries forward from, but no plan or tick', () => {
-    const s = usePlannerStore()
-    const pushups = { id: 'pu', name: 'Push-ups', reps: 10, target: 4 }
-    s.importData({ plans: { '2026-10-05': [pushups] }, log: {} }, null)
-    expect(s.exercises.map((e) => e.id)).toEqual(['pu'])
-    // A later week's plan moves what the current, unplanned week carries over.
-    s.importData({ plans: { '2026-10-12': [squats] }, log: {} }, null)
-    expect(s.exercises.map((e) => e.id)).toEqual(['sq'])
-    expect(s.plans['2026-10-05']).toEqual([pushups])
-  })
-
-  it('does not count a theme change as saved settings: the theme is the device’s', async () => {
+  it('does not count a theme change: the theme is the device’s', async () => {
     const s = usePlannerStore()
     s.setTheme('dark')
     await nextTick()
-    s.importData({ plans: {}, log: {} }, { accent: '#0a84ff', dailyPick: 5 })
-    expect([s.accent, s.dailyPick, s.theme]).toEqual(['#0a84ff', 5, 'dark'])
+    expect(s.savedSettings()).toBeNull()
   })
 })

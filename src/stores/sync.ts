@@ -18,6 +18,7 @@ import {
   type PortableSettings,
 } from '@/lib/storage'
 import type { Plans } from '@/lib/plans'
+import { EXPORT_FORMAT, EXPORT_VERSION, type ExportData } from '@/lib/transfer'
 import { useDietStore } from '@/stores/diet'
 import { usePlannerStore } from '@/stores/planner'
 
@@ -56,6 +57,10 @@ export type SyncState = {
   settings: PortableSettings | null
 }
 type Snapshot = { exercise: Tracked; diet: Tracked; settings: PortableSettings }
+/** What `POST /api/import` added. */
+export type ImportAdded = { weeks: number; ticks: number; settings: boolean }
+export type ImportOutcome =
+  { ok: true; added: ImportAdded } | { ok: false; code: 'offline' | 'server' | 'auth' | 'error' }
 
 export const CONFLICT_NOTICE =
   'A plan was changed on another device, so this device now shows that version.'
@@ -168,6 +173,8 @@ export const useSyncStore = defineStore('sync', () => {
   const status = ref<'idle' | 'syncing' | 'offline'>('idle')
   const pending = ref(0)
   const notice = ref<string | null>(null)
+  /** True once this session has read the account from the server, not only from the cache. */
+  const fresh = ref(false)
 
   let base: Snapshot | null = null
   let revs: Revs = { exercise: {}, diet: {} }
@@ -269,7 +276,7 @@ export const useSyncStore = defineStore('sync', () => {
   }
 
   /** A request on behalf of the signed-in user, which the API refuses for anyone else. */
-  function call<T>(method: 'GET' | 'PUT', path: string, body?: unknown) {
+  function call<T>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown) {
     return request<T>(method, path, body, { 'X-Expected-User': user.value ?? '' })
   }
 
@@ -381,6 +388,7 @@ export const useSyncStore = defineStore('sync', () => {
       }
       status.value = 'idle'
       retryDelay = FIRST_RETRY
+      fresh.value = true
       // A change made while the read was in flight is newer than the reply: keep it.
       capture()
       if (changes !== before || readOutbox().length) return
@@ -390,6 +398,46 @@ export const useSyncStore = defineStore('sync', () => {
       refreshing = null
     })
     return refreshing
+  }
+
+  /**
+   * Merge `data` into the account on the server (`POST /api/import`), then show the result. Local
+   * writes go first, so the server merges against everything this device has; the server's merge
+   * never deletes (docs/architecture.md §4). One request, however much the data holds.
+   */
+  async function importFile(data: ExportData): Promise<ImportOutcome> {
+    if (!user.value) return { ok: false, code: 'auth' }
+    const gen = generation
+    capture()
+    await flush()
+    if (gen !== generation) return { ok: false, code: 'error' }
+    // Queued writes must reach the server first, or the merge would not see them.
+    if (readOutbox().length) {
+      return { ok: false, code: status.value === 'offline' ? 'offline' : 'server' }
+    }
+    const file = {
+      format: EXPORT_FORMAT,
+      version: EXPORT_VERSION,
+      exportedAt: new Date().toISOString(),
+      exercise: data.exercise,
+      diet: data.diet,
+      ...(data.settings ? { settings: data.settings } : {}),
+    }
+    const res = await call<ImportAdded>('POST', '/import', file)
+    if (gen !== generation) return { ok: false, code: 'error' }
+    if (!res.ok) {
+      if (res.error.kind === 'offline') return { ok: false, code: 'offline' }
+      if (res.error.kind === 'server') return { ok: false, code: 'server' }
+      if (res.error.kind === 'auth') {
+        authLost?.()
+        return { ok: false, code: 'auth' }
+      }
+      return { ok: false, code: 'error' }
+    }
+    // A read already in flight was sent before the import: wait for it, then read again.
+    await refreshing
+    await refresh()
+    return { ok: true, added: res.data }
   }
 
   /** Begin syncing for `name`: show the cache at once, then send and read in the background. */
@@ -423,6 +471,7 @@ export const useSyncStore = defineStore('sync', () => {
     revs = { exercise: {}, diet: {} }
     user.value = null
     loaded.value = false
+    fresh.value = false
     status.value = 'idle'
     pending.value = 0
     notice.value = null
@@ -461,11 +510,13 @@ export const useSyncStore = defineStore('sync', () => {
     status,
     pending,
     notice,
+    fresh,
     start,
     stop,
     forget,
     flush,
     refresh,
+    importFile,
     onStorage,
     dismissNotice,
   }

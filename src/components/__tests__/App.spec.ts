@@ -406,6 +406,7 @@ describe('export and import', () => {
     expect(rowCells('Squats')[0]!.attributes('aria-pressed')).toBe('false')
 
     await button('Import').trigger('click')
+    await flushPromises()
     expect(wrapper.get('[role="status"]').text()).toBe('Imported.')
     expect(wrapper.find('[data-testid="import-summary"]').exists()).toBe(false)
     expect(rowCells('Squats')[0]!.attributes('aria-pressed')).toBe('true')
@@ -422,6 +423,7 @@ describe('export and import', () => {
       'Adds 3 weekly plans and 3 ticks, plus the accent and exercises per day. Existing plans and ticks stay as they are.',
     )
     await button('Import').trigger('click')
+    await flushPromises()
     expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#bf5af2')
     expect(wrapper.get('[data-testid="daily-pick"]').text()).toBe('2')
   })
@@ -453,7 +455,30 @@ describe('export and import', () => {
     await wrapper.get('button[aria-label="Blue"]').trigger('click')
     expect(wrapper.get('[data-testid="import-summary"]').text()).not.toContain('plus the accent')
     await button('Import').trigger('click')
+    await flushPromises()
     expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#0a84ff')
+  })
+
+  it('says so, and keeps the file, when the server cannot be reached', async () => {
+    mountApp()
+    await openSettings()
+    await choose(jsonFile(EXPORT))
+    api.offline = true
+    await button('Import').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      'Can’t reach the server, so nothing was imported. Try again when you’re online.',
+    )
+    expect(wrapper.find('[data-testid="import-summary"]').exists()).toBe(true)
+    api.offline = false
+    const before = api.paths('POST /import').length // the attempt made while offline
+    const release = api.hold()
+    await button('Import').trigger('click')
+    await button('Import').trigger('click') // a second press while the first is under way
+    release()
+    await flushPromises()
+    expect(api.paths('POST /import')).toHaveLength(before + 1)
+    expect(wrapper.get('[role="status"]').text()).toBe('Imported.')
   })
 
   it('discards the file on Cancel', async () => {

@@ -11,7 +11,6 @@ import {
   type Food,
   type Log,
 } from '@/lib/storage'
-import { mergeTracked } from '@/lib/transfer'
 import { copyPlan, planSource, type Plans } from '@/lib/plans'
 import * as tracker from '@/lib/tracker'
 
@@ -96,13 +95,6 @@ export const useDietStore = defineStore('diet', () => {
     adopt({ plans: {}, log: {} })
   }
 
-  /** Merges an export's food plans and log in without deleting anything (`mergeTracked`). */
-  function importData(incoming: DietData): void {
-    const merged = mergeTracked({ plans: plans.value, log: log.value }, incoming)
-    plans.value = merged.plans
-    log.value = merged.log
-  }
-
   return {
     plans,
     foods,
@@ -122,6 +114,5 @@ export const useDietStore = defineStore('diet', () => {
     adopt,
     adoptWeek,
     clear,
-    importData,
   }
 })

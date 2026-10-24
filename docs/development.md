@@ -68,8 +68,8 @@ Tests sit in `__tests__/` next to the code they cover:
   cleaning, loading and resetting the shared exercise form.
 - `src/lib/__tests__/transfer.spec.ts`: every case in `fixtures/transfer/` (parsing an export and
   merging one), plus building an export, the merge summary and the download. Add a fixture rather
-  than an inline case when the behaviour is part of the export contract, since the API's tests will
-  read the same files.
+  than an inline case when the behaviour is part of the export contract: the API's tests
+  (`api/tests/test_parity.py`) read the same files.
 - `fixtures/transfer/sample/`: `storage.json` is a realistic `localStorage` snapshot. It spans five
   weeks (2026-09-21 to 2026-10-19): four with data, and 2026-09-28 left empty so it carries the
   plan before it forward. It has plans edited over time (sets, weights, Back extensions removed,
@@ -97,10 +97,10 @@ Tests sit in `__tests__/` next to the code they cover:
   (defaults, carry forward, a week getting its own plan, copying to the next week), config mode,
   the midnight refresh, `adopt`, `adoptWeek` and `clear`, the theme being the only thing stored
   (merged into the settings key), the keys from before accounts never being written, and
-  `importData` (merging, and settings applying only when the user has none).
+  `savedSettings` (tracked in memory, set by adopting or changing settings, never by the theme).
 - `src/stores/__tests__/diet.spec.ts`: food toggling in the planner's week, shared week navigation,
   goal clamping, add/remove, carrying and copying food plans, `adopt`, `adoptWeek` and `clear`, the
-  old diet keys never being written, `importData`.
+  old diet keys never being written.
 - `src/stores/__tests__/sync.spec.ts`: the sync store against the fake API:
   - the cache shown at once, then the server's state; no cache, or a broken one;
   - a first tick creating the week's plan before the tick, and revisions carried forward;
@@ -111,7 +111,15 @@ Tests sit in `__tests__/` next to the code they cover:
     notice for identical creates), and refused writes being dropped;
   - reads that must not undo local edits, including one the watcher has not seen;
   - other tabs' cache and outbox writes, stop and forget, the old keys never written, `diff` and
-    `normaliseState`.
+    `normaliseState`;
+  - `importFile`: queued writes first, then one server import and a read; offline, refused, 401,
+    and nobody signed in.
+- `src/lib/__tests__/legacy.spec.ts`: reading the keys from before accounts (v2, the v1 migration,
+  the accent and daily pick but never the theme, broken JSON, nothing worth offering).
+- `src/components/__tests__/ImportPrompt.spec.ts`: the first-login prompt through the app: what it
+  offers, Add (merged on the fake server, shown, remembered), Not mine, Later, offline and refused
+  imports, an account that already holds everything, a browser with no earlier log, waiting for
+  the account's state, and per-user answers.
 - `src/stores/__tests__/session.spec.ts`: sign-in from a remembered user (online, offline, ended), a
   still-valid cookie, switching user, every login refusal, invite links, sign-out forgetting the
   device's data, and sign-out refused offline.

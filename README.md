@@ -34,8 +34,13 @@
   server and sync across devices; the theme stays with each device. The app opens from a cached
   copy and keeps working offline, sending changes once the connection is back.
 - **Export and import.** Settings → **Export** downloads your plans, ticks, accent and daily pick
-  as a JSON file; **Import…** merges such a file in. An import only adds: weeks you already have
-  keep their plan, and no tick is ever cleared. The export is each person's own copy of their data.
+  as a JSON file; **Import…** merges such a file into your account. An import only adds: weeks you
+  already have keep their plan, and no tick is ever cleared. The export is your own copy of your
+  data.
+- **Moving a log from before accounts.** A browser that kept a log before accounts existed offers
+  it once you sign in: **Add to my account** merges it in, **Not mine** stops the question for you
+  on that browser, **Later** asks next time. A log in another browser or profile can be moved with
+  Export there and Import… here.
 
 ## 2. Getting started
 
