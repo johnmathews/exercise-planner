@@ -260,7 +260,7 @@ def create_app(config: Config, run_backups: bool = True) -> FastAPI:
         file = data.export_file(conn, user.id, config.clock())
         day = file["exportedAt"][:10]
         response.headers["Content-Disposition"] = (
-            f'attachment; filename="exercise-planner-{day}.json"'
+            f'attachment; filename="fitness-planner-{day}.json"'
         )
         return file
 
@@ -276,5 +276,5 @@ def create_app(config: Config, run_backups: bool = True) -> FastAPI:
 
 
 def create_app_from_env() -> FastAPI:
-    """The uvicorn entry point: `uvicorn --factory exercise_planner_api.app:create_app_from_env`."""
+    """The uvicorn entry point: `uvicorn --factory fitness_planner_api.app:create_app_from_env`."""
     return create_app(Config.from_env())

@@ -1,7 +1,7 @@
 {
   "description": "Week keys need exactly four, two and two ASCII digits: full-width digits, a trailing newline and a single-digit month all drop out, in plans and in the log.",
   "input": {
-    "format": "exercise-planner-export",
+    "format": "fitness-planner-export",
     "version": 1,
     "exercise": {
       "plans": {

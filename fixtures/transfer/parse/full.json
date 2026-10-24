@@ -1,7 +1,7 @@
 {
   "description": "A complete export round-trips: exercise fields, foods, logs and settings survive unchanged.",
   "input": {
-    "format": "exercise-planner-export",
+    "format": "fitness-planner-export",
     "version": 1,
     "exportedAt": "2026-10-24T09:30:00.000Z",
     "exercise": {

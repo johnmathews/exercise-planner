@@ -7,7 +7,7 @@ import { usePlannerStore } from '@/stores/planner'
 import { useSyncStore } from '@/stores/sync'
 
 /** The last signed-in user, so a reload shows their cached data before the server answers. */
-export const SESSION_KEY = 'exercise-planner-session-v1'
+export const SESSION_KEY = 'fitness-planner-session-v1'
 
 /** Why a sign-in, a link or a sign-out did not work; the forms turn these into sentences. */
 export type AuthProblem = {

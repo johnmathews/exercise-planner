@@ -72,15 +72,15 @@ foods (with goals). Ticks live in a separate **log**, keyed by week and item id.
 
 `usePlannerStore` is a setup store.
 
-| State                 | Kept by                                     | Notes                                                           |
-| --------------------- | ------------------------------------------- | --------------------------------------------------------------- |
-| `plans`               | the sync store: server and per-user cache   | week → `{ id, name, sets?, reps, perSide?, weight?, target }[]` |
-| `log`                 | the sync store: server and per-user cache   | week Monday `YYYY-MM-DD` → exercise id → seven booleans         |
-| `accent`, `dailyPick` | the sync store: server and per-user cache   | defaults `#30d158`, `3`                                         |
-| `theme`               | `exercise-planner-settings-v1` (the device) | `system` (default), `light` or `dark`                           |
-| `configMode`          | no                                          | `false` (normal mode) on every load                             |
-| `weekOffset`          | no                                          | `0` is the current week                                         |
-| `now`                 | no                                          | a ref so "today" can move; see §5                               |
+| State                 | Kept by                                    | Notes                                                           |
+| --------------------- | ------------------------------------------ | --------------------------------------------------------------- |
+| `plans`               | the sync store: server and per-user cache  | week → `{ id, name, sets?, reps, perSide?, weight?, target }[]` |
+| `log`                 | the sync store: server and per-user cache  | week Monday `YYYY-MM-DD` → exercise id → seven booleans         |
+| `accent`, `dailyPick` | the sync store: server and per-user cache  | defaults `#30d158`, `3`                                         |
+| `theme`               | `fitness-planner-settings-v1` (the device) | `system` (default), `light` or `dark`                           |
+| `configMode`          | no                                         | `false` (normal mode) on every load                             |
+| `weekOffset`          | no                                         | `0` is the current week                                         |
+| `now`                 | no                                         | a ref so "today" can move; see §5                               |
 
 The stores start empty (showing the defaults) and never write the user's data themselves. The sync
 store fills them with `adopt` and saves their changes (§7).
@@ -109,30 +109,37 @@ offers `isEaten`, `totalFor`, `toggle`, `changeTarget` (0–7), `addFood` (goal 
 empty name), `removeFood`, `copyToNextWeek`, `adopt`, `adoptWeek` and `clear`. Food goals work
 like exercise goals (met once the count reaches a non-zero goal); foods have no daily target.
 
-The planner writes only the theme, merged into whatever `exercise-planner-settings-v1` already holds.
+The planner writes only the theme, merged into whatever `fitness-planner-settings-v1` already holds.
 `writeKey` skips the write when the stored string already matches, and swallows storage errors, so
 with storage blocked or full the app keeps working in memory.
 
 ## 4. Storage format and validation
 
-| Key                                 | Holds                                                           | Written |
-| ----------------------------------- | --------------------------------------------------------------- | ------- |
-| `exercise-planner-session-v1`       | `{ user }`: the last signed-in user                             | yes     |
-| `exercise-planner-cache-v1:<user>`  | the user's state as `GET /api/state` returns it, with `revs`    | yes     |
-| `exercise-planner-outbox-v1:<user>` | writes not yet sent (§7)                                        | yes     |
-| `exercise-planner-import-v1:<user>` | the first-login prompt's answer, `imported` or `dismissed` (§7) | yes     |
-| `exercise-planner-settings-v1`      | `theme`, read before first paint by `public/theme-init.js`      | theme   |
-| `exercise-planner-v2`, `-diet-v2`   | exercise and food `{ plans, log }` from before accounts         | never   |
-| `exercise-planner-v1`, `-diet-v1`   | the single-list format from before weekly plans                 | never   |
+| Key                                | Holds                                                           | Written |
+| ---------------------------------- | --------------------------------------------------------------- | ------- |
+| `fitness-planner-session-v1`       | `{ user }`: the last signed-in user                             | yes     |
+| `fitness-planner-cache-v1:<user>`  | the user's state as `GET /api/state` returns it, with `revs`    | yes     |
+| `fitness-planner-outbox-v1:<user>` | writes not yet sent (§7)                                        | yes     |
+| `fitness-planner-import-v1:<user>` | the first-login prompt's answer, `imported` or `dismissed` (§7) | yes     |
+| `fitness-planner-settings-v1`      | `theme`, read before first paint by `public/theme-init.js`      | theme   |
+| `fitness-planner-v2`, `-diet-v2`   | exercise and food `{ plans, log }` from before accounts         | never   |
+| `fitness-planner-v1`, `-diet-v1`   | the single-list format from before weekly plans                 | never   |
 
 Since accounts, nothing writes the keys from before them. They stay because they hold what a browser
 recorded locally, which the first-login import (§7) reads with the parsing, migration and
 validation below (`readLegacyData`, `src/lib/legacy.ts`). Signing out does not remove them. Browsers isolate storage per origin, so a cache belongs to
 one origin and one user.
 
+**The rename.** Until 2026-10-24 every key began `exercise-planner-` rather than `fitness-planner-`.
+`migrateKeyPrefix` (`src/lib/storage.ts`), called from `src/main.ts` before the stores start, moves
+each old key to its new name, outbox included, so unsent writes survive. A value already under the
+new name wins, and a copy that fails (storage full) leaves the old key for the next load to retry.
+`public/theme-init.js` runs before that, so it reads the old settings key when the new one is
+absent.
+
 **Migration.** Before weekly plans, one list served every week: `{ exercises, log }` under
-`exercise-planner-v1` (the design prototype's key and shape) and `{ foods, log }` under
-`exercise-planner-diet-v1`. When a v2 key is missing and its v1 key exists, `parsePlannerData` and
+`fitness-planner-v1` (the design prototype's shape, under its key renamed) and `{ foods, log }` under
+`fitness-planner-diet-v1`. When a v2 key is missing and its v1 key exists, `parsePlannerData` and
 `parseDietData` convert it: the list becomes the plan for every week in the log and for the current
 week, so every week looks as it did. A v2 value that is not a JSON object also falls back to
 migrating v1 (or to nothing without one). Before accounts, the stores saved the converted result as
@@ -158,11 +165,11 @@ Fish 2, Nuts 3).
 1–8, and accepts only `system`, `light` or `dark` as the theme, falling back to the defaults
 otherwise. Settings saved before the theme option existed load as `system`.
 
-**Export and import.** Settings → Export downloads `exercise-planner-YYYY-MM-DD.json`:
+**Export and import.** Settings → Export downloads `fitness-planner-YYYY-MM-DD.json`:
 
 ```json
 {
-  "format": "exercise-planner-export",
+  "format": "fitness-planner-export",
   "version": 1,
   "exportedAt": "2026-10-24T09:30:00.000Z",
   "exercise": { "plans": {}, "log": {} },
@@ -173,7 +180,9 @@ otherwise. Settings saved before the theme option existed load as `system`.
 
 The theme is not exported, because it belongs to the device rather than the person. Import… reads a
 file through `parseExport` (`src/lib/transfer.ts`), which rejects anything that is not JSON, has
-another `format`, or has a `version` other than 1. It validates the rest with the same normalisers
+another `format`, or has a `version` other than 1. Files exported before the rename carry
+`"format": "exercise-planner-export"` and import the same way (`OLD_EXPORT_FORMAT`, in both
+languages). It validates the rest with the same normalisers
 as storage, so a hand-edited file loads the way a hand-edited `localStorage` value would. Missing
 `settings`, or settings that are not an object, mean "no settings".
 
@@ -271,7 +280,7 @@ their templates and have no `<style>` blocks. Everything global is in `src/style
 ## 7. Accounts and sync
 
 **Signing in.** `session.init()` runs before the first render. A user remembered in
-`exercise-planner-session-v1` is signed in at once and their cache shown, then `GET /api/auth/me`
+`fitness-planner-session-v1` is signed in at once and their cache shown, then `GET /api/auth/me`
 confirms it. A 401 asks them to sign in again, keeping unsent writes; being offline keeps them
 working from the cache. With nobody remembered the app waits for the server, then shows the
 sign-in form. Invite and reset links arrive as `#/invite/<token>` and `#/reset/<token>`. The token
@@ -343,7 +352,7 @@ anything the account lacks, it offers to add it, naming what it would add:
 - **Not mine** remembers the answer for this user on this browser.
 - **Later** asks again on the next load.
 
-The answer is kept in `exercise-planner-import-v1:<user>` (`imported` or `dismissed`), which signing
+The answer is kept in `fitness-planner-import-v1:<user>` (`imported` or `dismissed`), which signing
 out leaves in place. If the account already holds everything the keys do (imported from another
 device, say), the prompt records `imported` and never appears. Only an accent or daily pick in the
 settings key counts as data: every device still writes its theme there. The old keys are never

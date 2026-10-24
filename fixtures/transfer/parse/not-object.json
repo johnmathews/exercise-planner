@@ -1,5 +1,5 @@
 {
   "description": "A JSON array is rejected.",
-  "input": [{ "format": "exercise-planner-export", "version": 1 }],
+  "input": [{ "format": "fitness-planner-export", "version": 1 }],
   "expected": { "ok": false, "error": "format" }
 }

@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  DATA_KEY,
   DEFAULT_SETTINGS,
+  SETTINGS_KEY,
   defaultExercises,
   defaultFoods,
+  migrateKeyPrefix,
   normaliseWeight,
   parseDietData,
   parsePlannerData,
@@ -269,5 +272,51 @@ describe('readKey / writeKey', () => {
     })
     expect(readKey('k')).toBeNull()
     expect(() => writeKey('k', 1)).not.toThrow()
+  })
+})
+
+describe('migrateKeyPrefix', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    localStorage.clear()
+  })
+
+  it('moves every exercise-planner key to fitness-planner, leaving other keys alone', () => {
+    localStorage.setItem('exercise-planner-v2', '{"plans":{}}')
+    localStorage.setItem('exercise-planner-outbox-v1:alice', '[1]')
+    localStorage.setItem('other', 'x')
+    migrateKeyPrefix()
+    expect(localStorage.getItem(DATA_KEY)).toBe('{"plans":{}}')
+    expect(localStorage.getItem('fitness-planner-outbox-v1:alice')).toBe('[1]')
+    expect(localStorage.getItem('exercise-planner-v2')).toBeNull()
+    expect(localStorage.getItem('exercise-planner-outbox-v1:alice')).toBeNull()
+    expect(localStorage.getItem('other')).toBe('x')
+    expect(localStorage).toHaveLength(3)
+  })
+
+  it('keeps a value already under the new name and drops the old one', () => {
+    localStorage.setItem(SETTINGS_KEY, '{"theme":"dark"}')
+    localStorage.setItem('exercise-planner-settings-v1', '{"theme":"light"}')
+    migrateKeyPrefix()
+    expect(localStorage.getItem(SETTINGS_KEY)).toBe('{"theme":"dark"}')
+    expect(localStorage.getItem('exercise-planner-settings-v1')).toBeNull()
+  })
+
+  it('keeps the old key when the copy fails, so the next load retries', () => {
+    localStorage.setItem('exercise-planner-v2', '{}')
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota')
+    })
+    expect(() => migrateKeyPrefix()).not.toThrow()
+    expect(localStorage.getItem('exercise-planner-v2')).toBe('{}')
+  })
+
+  it('does nothing when storage is blocked', () => {
+    localStorage.setItem('exercise-planner-v2', '{}')
+    vi.spyOn(Storage.prototype, 'key').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    expect(() => migrateKeyPrefix()).not.toThrow()
+    expect(localStorage.getItem('exercise-planner-v2')).toBe('{}')
   })
 })

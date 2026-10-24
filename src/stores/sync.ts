@@ -31,8 +31,8 @@ import { usePlannerStore } from '@/stores/planner'
  * is waiting to go out, so a refresh can never undo an edit that hasn't reached the server yet.
  */
 
-export const CACHE_PREFIX = 'exercise-planner-cache-v1:'
-export const OUTBOX_PREFIX = 'exercise-planner-outbox-v1:'
+export const CACHE_PREFIX = 'fitness-planner-cache-v1:'
+export const OUTBOX_PREFIX = 'fitness-planner-outbox-v1:'
 
 const SECTIONS = ['exercise', 'diet'] as const
 type Section = (typeof SECTIONS)[number]

@@ -1,7 +1,7 @@
 {
   "description": "Bad fields are normalised exactly as stored data is: bad weeks and items drop out, numbers clamp, logs pad to seven booleans, the theme is ignored.",
   "input": {
-    "format": "exercise-planner-export",
+    "format": "fitness-planner-export",
     "version": 1,
     "exercise": {
       "plans": {

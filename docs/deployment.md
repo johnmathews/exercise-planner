@@ -17,12 +17,12 @@ The image is multi-architecture (`linux/amd64`, `linux/arm64`). Only the runtime
 per target, and it holds nothing but `COPY` steps, so no QEMU emulation is needed.
 
 ```bash
-docker build -t exercise-planner .        # host architecture, loaded locally
-docker run -p 8080:8080 exercise-planner
+docker build -t fitness-planner .        # host architecture, loaded locally
+docker run -p 8080:8080 fitness-planner
 ```
 
 To check both platforms build, run
-`docker buildx build --platform linux/amd64,linux/arm64 -t exercise-planner .`. A multi-platform
+`docker buildx build --platform linux/amd64,linux/arm64 -t fitness-planner .`. A multi-platform
 result stays in the build cache unless the builder supports loading it (Docker Desktop with the
 containerd image store) or `--push` sends it to a registry.
 
@@ -30,7 +30,7 @@ containerd image store) or `--push` sends it to a registry.
 runs on the build machine's platform and has uv install the locked dependencies as wheels for the
 target (`x86_64-` or `aarch64-manylinux_2_28`). Every dependency ships binary wheels for both,
 so nothing compiles. The runtime stage is `python:3.13-slim`, running as uid 10001 with `/data`
-as its volume and uvicorn on port **8000**. `ep-admin` is on the `PATH`, and the `HEALTHCHECK`
+as its volume and uvicorn on port **8000**. `fp-admin` is on the `PATH`, and the `HEALTHCHECK`
 calls `/api/healthz` with Python's `urllib` (the slim image has no curl).
 
 **Memory.** Measured on the API image on 2026-10-24 by reading the container's
@@ -48,7 +48,7 @@ container's 64m would be killed by the first login.
 
 `docker compose up --build` runs both images locally: the app on `http://localhost:8083` and the API
 on `http://localhost:8000`, with the API's data in the `api-data` volume. Mint a first invite with
-`docker compose exec fitness-api ep-admin invite <name>`.
+`docker compose exec fitness-api fp-admin invite <name>`.
 
 ## 2. nginx
 
@@ -85,8 +85,11 @@ multi-arch build before `main` publishes it; `compose` builds for the runner's o
 image must answer `/api/healthz`, and the arm64 image, run under QEMU, must import its native
 modules. The `build` job builds without pushing and holds only `contents: read`. The `publish` job
 is the only one granted `packages: write`. It logs in to `ghcr.io` with `GITHUB_TOKEN` and pushes
-`ghcr.io/johnmathews/exercise-planner` and `ghcr.io/johnmathews/exercise-planner-api`, each tagged
-`latest` and `sha-<short sha>`. Every checkout sets `persist-credentials: false`.
+`ghcr.io/johnmathews/fitness-planner` and `ghcr.io/johnmathews/fitness-planner-api`, each tagged
+`latest` and `sha-<short sha>`. Every checkout sets `persist-credentials: false`. Before
+2026-10-24 the project was called exercise-planner and published `exercise-planner` and
+`exercise-planner-api`. Those images still exist but no longer update, so a host must pull the new
+names.
 
 ## 4. Data and hosting
 
@@ -103,7 +106,7 @@ in production.
 `scripts/compose-smoke.sh` builds and starts both images with `docker-compose.yml` and checks the
 whole path through nginx:
 
-- a user signs up from an `ep-admin` invite, writes a tick and reads it back;
+- a user signs up from an `fp-admin` invite, writes a tick and reads it back;
 - a write from a foreign `Origin` gets 403;
 - with the API stopped, `/api/` answers 502 or 504 within seconds while nginx still serves the app.
 

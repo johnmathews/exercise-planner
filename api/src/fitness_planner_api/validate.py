@@ -13,7 +13,9 @@ import re
 import sys
 from typing import Any, Literal, TypedDict
 
-EXPORT_FORMAT = "exercise-planner-export"
+EXPORT_FORMAT = "fitness-planner-export"
+#: Files exported before the app was renamed carry this format; they import as if current.
+OLD_EXPORT_FORMAT = "exercise-planner-export"
 EXPORT_VERSION = 1
 
 MIN_TARGET, MAX_TARGET = 0, 7
@@ -233,7 +235,9 @@ def parse_export(text: str) -> ExportData:
     parsed = parse_json(text)
     if parsed is None:
         raise ExportError("json")
-    if not isinstance(parsed, dict) or parsed.get("format") != EXPORT_FORMAT:
+    if not isinstance(parsed, dict):
+        raise ExportError("format")
+    if parsed.get("format") not in (EXPORT_FORMAT, OLD_EXPORT_FORMAT):
         raise ExportError("format")
     if as_number(parsed.get("version")) != EXPORT_VERSION:
         raise ExportError("version")

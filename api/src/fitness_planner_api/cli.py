@@ -1,4 +1,4 @@
-"""`ep-admin`: invites, resets and account switches, run in the API container (docs/api.md §5)."""
+"""`fp-admin`: invites, resets and account switches, run in the API container (docs/api.md §5)."""
 
 import argparse
 import os
@@ -23,7 +23,7 @@ def _when(ts: int) -> str:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="ep-admin", description=__doc__)
+    parser = argparse.ArgumentParser(prog="fp-admin", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     for name, text in [
         ("invite", "print a single-use sign-up link for a new user (valid 7 days)"),
@@ -46,7 +46,7 @@ def main(
     try:
         config = Config.from_env(env)
     except ValueError as e:
-        print(f"ep-admin: {e}", file=sys.stderr)
+        print(f"fp-admin: {e}", file=sys.stderr)
         return 1
     if clock is not None:
         config = replace(config, clock=clock)
@@ -57,7 +57,7 @@ def main(
     except auth.AuthError as e:
         name = getattr(args, "username", "")
         text = f"no user named {name!r}" if e.code == "no-user" else f"{name}: {MESSAGES[e.code]}"
-        print(f"ep-admin: {text}", file=sys.stderr)
+        print(f"fp-admin: {text}", file=sys.stderr)
         return 1
     finally:
         conn.close()

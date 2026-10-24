@@ -31,17 +31,17 @@ export type DietData = { plans: Plans<Food>; log: Log }
 export type Settings = { accent: string; dailyPick: number; theme: Theme }
 
 /** Exercise plans per week plus the log: `{ plans, log }`. */
-export const DATA_KEY = 'exercise-planner-v2'
+export const DATA_KEY = 'fitness-planner-v2'
 /** Food plans per week plus the diet log. */
-export const DIET_KEY = 'exercise-planner-diet-v2'
-export const SETTINGS_KEY = 'exercise-planner-settings-v1'
+export const DIET_KEY = 'fitness-planner-diet-v2'
+export const SETTINGS_KEY = 'fitness-planner-settings-v1'
 /**
  * The earlier single-list format (`{ exercises, log }` and `{ foods, log }`; the exercise one is the
- * design prototype's). Read to migrate when v2 data is missing or unreadable; never written or
- * deleted.
+ * design prototype's, under its old `exercise-planner-v1` name). Read to migrate when v2 data is
+ * missing or unreadable; never written or deleted, apart from `migrateKeyPrefix` moving it.
  */
-export const LEGACY_DATA_KEY = 'exercise-planner-v1'
-export const LEGACY_DIET_KEY = 'exercise-planner-diet-v1'
+export const LEGACY_DATA_KEY = 'fitness-planner-v1'
+export const LEGACY_DIET_KEY = 'fitness-planner-diet-v1'
 
 export const ACCENTS = ['#0a84ff', '#30d158', '#ff9f0a', '#bf5af2'] as const
 export const MIN_TARGET = 0
@@ -250,5 +250,36 @@ export function removeKey(key: string): void {
     localStorage.removeItem(key)
   } catch {
     // Storage unavailable: nothing was stored.
+  }
+}
+
+/** Every key above began with this before the app was renamed. */
+export const OLD_KEY_PREFIX = 'exercise-planner-'
+export const KEY_PREFIX = 'fitness-planner-'
+
+/**
+ * Move each `exercise-planner-…` key to the same name under `fitness-planner-…`. It runs once per
+ * page load, before the stores read storage. A value already under the new name wins; the old key
+ * goes either way. When a copy fails (storage full) the old key stays, so the next load retries.
+ */
+export function migrateKeyPrefix(): void {
+  const keys: string[] = []
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith(OLD_KEY_PREFIX)) keys.push(key)
+    }
+  } catch {
+    return // Storage unavailable: nothing to move.
+  }
+  for (const key of keys) {
+    const next = KEY_PREFIX + key.slice(OLD_KEY_PREFIX.length)
+    try {
+      const value = localStorage.getItem(key)
+      if (value !== null && localStorage.getItem(next) === null) localStorage.setItem(next, value)
+      localStorage.removeItem(key)
+    } catch {
+      // Storage full: keep the old copy for the next load.
+    }
   }
 }

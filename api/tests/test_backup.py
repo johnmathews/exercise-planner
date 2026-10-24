@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from exercise_planner_api.backup import BackupThread, backup_once
-from exercise_planner_api.config import Config
+from fitness_planner_api.backup import BackupThread, backup_once
+from fitness_planner_api.config import Config
 
 from .conftest import START, Clock
 

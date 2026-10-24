@@ -1,7 +1,7 @@
 {
   "description": "true and false are not numbers, and 1 is not a boolean: numeric fields fall back, perSide is dropped, and only a literal true ticks a day.",
   "input": {
-    "format": "exercise-planner-export",
+    "format": "fitness-planner-export",
     "version": 1,
     "exercise": {
       "plans": {

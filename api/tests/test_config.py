@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from exercise_planner_api.config import Config
+from fitness_planner_api.config import Config
 
 
 def test_reads_the_environment() -> None:

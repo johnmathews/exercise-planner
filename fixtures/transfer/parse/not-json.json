@@ -1,5 +1,5 @@
 {
   "description": "Text that is not JSON is rejected.",
-  "inputText": "{\"format\": \"exercise-planner-export\",",
+  "inputText": "{\"format\": \"fitness-planner-export\",",
   "expected": { "ok": false, "error": "json" }
 }

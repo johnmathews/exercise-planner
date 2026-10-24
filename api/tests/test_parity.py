@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from exercise_planner_api.validate import (
+from fitness_planner_api.validate import (
     ExportError,
     merge_settings,
     merge_summary,
@@ -79,13 +79,13 @@ def test_merge_does_not_alias_its_inputs() -> None:
 def test_deliberate_divergences_from_javascript() -> None:
     """Inputs JavaScript accepts that the API refuses as `json`; neither can come from the app."""
     deep = (
-        '{"format": "exercise-planner-export", "version": 1, "x": '
+        '{"format": "fitness-planner-export", "version": 1, "x": '
         + "[" * 100_000
         + "]" * 100_000
         + "}"
     )
     surrogate = (
-        '{"format": "exercise-planner-export", "version": 1,'
+        '{"format": "fitness-planner-export", "version": 1,'
         ' "exercise": {"log": {"2026-10-19": {"\\ud800": [true]}}}}'
     )
     for text in (deep, surrogate):

@@ -6,10 +6,10 @@ from typing import Any
 import pytest
 from argon2 import PasswordHasher, profiles
 
-from exercise_planner_api import auth
-from exercise_planner_api.auth import AuthError
-from exercise_planner_api.config import Config
-from exercise_planner_api.db import connect
+from fitness_planner_api import auth
+from fitness_planner_api.auth import AuthError
+from fitness_planner_api.config import Config
+from fitness_planner_api.db import connect
 
 from .conftest import Clock
 
