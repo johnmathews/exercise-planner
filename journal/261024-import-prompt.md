@@ -35,10 +35,29 @@ Import… merges files on the server.
 - **Export stays local.** It writes what the stores show, which works offline. The plan had
   suggested `GET /api/export`, which adds nothing for the person exporting.
 
-## 3. Verified
+## 3. Review fixes
 
-- 325 tests pass (20 more than after W3), covering every line and function. Lint, format, types and the build
-  are clean.
+A fresh-eyes review reproduced two problems; both are fixed:
+
+- **Importing a very old log could replace this week's plan in the account.** The single-list
+  migration copies the list onto the current week, so the import gave the account a plan for this
+  week where it had none. That replaced the plan the account would have carried forward. An empty
+  old food list emptied it the same way. The import now puts the list only on weeks it was ticked
+  in, adds nothing for an empty list, and reads a damaged v1 key as nothing.
+- **After an import, the screen could keep showing the old state.** `importFile` reused a read
+  already in flight, sent before the import. It now waits for that read and then reads again. It
+  also refuses to import while queued writes cannot be sent, so the merge always sees them.
+- **The prompt waits for a server read.** It now waits for the app to read the account from the
+  server in this session (`sync.fresh`), not just for the cache, so a stale copy can't mark the
+  question answered.
+- **Clearer failures:** a server failure and an ended session each get their own message.
+- **Stronger tests.** The per-user marker test now switches users on one browser. The "waits for
+  the account" test checks that the prompt then appears.
+
+## 4. Verified
+
+- 331 tests pass (26 more than after W3), covering every line and function. Lint, format, types
+  and the build are clean.
 - **Red checks:** each prompt rule was broken in turn, and every break failed its tests:
   - not remembering the answer;
   - asking when there is nothing to add;

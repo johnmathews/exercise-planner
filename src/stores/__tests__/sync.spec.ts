@@ -587,10 +587,12 @@ describe('importFile', () => {
     expect(planner.plans).toEqual({})
   })
 
-  it('reports a refusal, and hands control back on a 401', async () => {
+  it('reports a refusal, a server failure, and hands control back on a 401', async () => {
     const { sync } = await start(emptyState())
     api.failNext('POST', '/import', 400, { error: 'format' })
     expect(await sync.importFile(data)).toEqual({ ok: false, code: 'error' })
+    api.failNext('POST', '/import', 500)
+    expect(await sync.importFile(data)).toEqual({ ok: false, code: 'server' })
     api.signedIn = null
     expect(await sync.importFile(data)).toEqual({ ok: false, code: 'auth' })
     expect(lost).toHaveBeenCalled()
@@ -616,8 +618,45 @@ describe('importFile', () => {
   })
 
   it('refuses when nobody is signed in', async () => {
-    expect(await useSyncStore().importFile(data)).toEqual({ ok: false, code: 'error' })
+    expect(await useSyncStore().importFile(data)).toEqual({ ok: false, code: 'auth' })
     expect(api.calls).toEqual([])
+  })
+
+  it('reads the account afresh after importing, even with a read already in flight', async () => {
+    const { sync, planner } = await start(emptyState())
+    const release = api.holdNext('GET', '/state') // a read sent before the import
+    const reading = sync.refresh()
+    await flushPromises()
+    const importing = sync.importFile(data)
+    await flushPromises()
+    release()
+    await reading
+    expect(await importing).toMatchObject({ ok: true })
+    expect(planner.plans['2026-10-12']).toEqual([SQUATS])
+  })
+
+  it('does not import while queued writes cannot be sent', async () => {
+    const { sync, planner } = await start(emptyState())
+    api.offline = true
+    planner.toggle('pu', 3)
+    await settle()
+    api.offline = false
+    api.failNext('PUT', '/plans', 500) // the queued write fails again, so it is retried later
+    expect(await sync.importFile(data)).toMatchObject({ ok: false })
+    expect(api.paths('POST /import')).toEqual([])
+  })
+
+  it('says when it has read the account itself, not just the cache', async () => {
+    const release = api.holdNext('GET', '/state')
+    localStorage.setItem(CACHE_PREFIX + USER, JSON.stringify(emptyState()))
+    const sync = useSyncStore()
+    sync.start(USER, lost)
+    expect([sync.loaded, sync.fresh]).toEqual([true, false])
+    release()
+    await flushPromises()
+    expect(sync.fresh).toBe(true)
+    sync.stop()
+    expect(sync.fresh).toBe(false)
   })
 })
 

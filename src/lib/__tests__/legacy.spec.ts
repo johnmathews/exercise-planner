@@ -48,9 +48,27 @@ describe('readLegacyData', () => {
     )
     localStorage.setItem(LEGACY_DIET_KEY, JSON.stringify({ foods: [], log: {} }))
     const data = readLegacyData(WEEK)!
-    expect(Object.keys(data.exercise.plans).sort()).toEqual(['2026-10-12', WEEK])
-    expect(data.diet.plans).toEqual({ [WEEK]: [] })
+    // The list goes only on weeks it was ticked in: copying it onto this week, as the old app did
+    // locally, would replace the account's carried-forward plan for this week and later ones.
+    expect(Object.keys(data.exercise.plans)).toEqual(['2026-10-12'])
+    // An empty list is no plan at all, so it cannot empty a week in the account.
+    expect(data.diet).toEqual({ plans: {}, log: {} })
     expect(data.settings).toBeNull()
+  })
+
+  it('keeps a single-list plan that was never ticked, on this week', () => {
+    localStorage.setItem(
+      LEGACY_DATA_KEY,
+      JSON.stringify({ exercises: [{ id: 'a', name: 'A', reps: 1, target: 2 }], log: {} }),
+    )
+    expect(readLegacyData(WEEK)!.exercise.plans).toEqual({
+      [WEEK]: [{ id: 'a', name: 'A', reps: 1, target: 2 }],
+    })
+  })
+
+  it('reads a damaged single-list key as nothing, not the default exercises', () => {
+    localStorage.setItem(LEGACY_DATA_KEY, '{broken')
+    expect(readLegacyData(WEEK)).toBeNull()
   })
 
   it('counts settings alone as data worth offering', () => {

@@ -102,8 +102,9 @@ async function signOut(): Promise<void> {
   signOutProblem.value = problem ? describeProblem(problem) : null
 }
 
-const IMPORT_FAILED: Record<'offline' | 'auth' | 'error', string> = {
+const IMPORT_FAILED: Record<'offline' | 'server' | 'auth' | 'error', string> = {
   offline: 'Can’t reach the server, so nothing was imported. Try again when you’re online.',
+  server: 'The server had a problem, so nothing was imported. Try again in a while.',
   auth: 'Your session has ended. Sign in again, then import the file.',
   error: 'The server refused the import, so nothing changed.',
 }

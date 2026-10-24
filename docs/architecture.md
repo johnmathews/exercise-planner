@@ -181,9 +181,11 @@ applies the same rules):
 - The file's accent and daily pick apply only when the account has no settings of their own yet.
 
 Confirming sends the file to `POST /api/import` (`sync.importFile`): the server merges it against
-the account's real state in one transaction, and the app then reads the result. Local writes still
-queued go out first, so the server merges against everything this device has. Offline, nothing is
-imported and the popover says so. The confirm step names how many weeks and ticks the file adds
+the account's real state in one transaction, and the app then reads the account afresh (after any
+read already in flight, which predates the import). Local writes still queued go out first, so the
+server merges against everything this device has; if they cannot be sent, nothing is imported. When
+the import cannot be done, the popover says why (offline, a server failure, an ended session) and
+keeps the file ready to try again. The confirm step names how many weeks and ticks the file adds
 (`mergeSummary`, through `useImportSummary`, which the first-login prompt shares) before anything
 is written. It is computed from the current state, so it stays right if another tab or a settings
 change lands while it is open. Importing the same file twice adds nothing the second time. Adding a week can change what
@@ -192,7 +194,7 @@ the intended result.
 
 `fixtures/transfer/` holds the parse and merge cases as JSON, each with its expected result.
 `src/lib/__tests__/transfer.spec.ts` runs every case. The format is the contract for the API's
-import and export as well, so the API's tests will run the same files.
+import and export as well: the API's tests (`api/tests/test_parity.py`) run the same files.
 
 ## 5. Decisions beyond the design
 
@@ -328,9 +330,9 @@ button and how many changes are waiting. Conflict and refused-write notices stay
 It sits in a live region that is always present, so screen readers announce each message.
 
 **The first-login import.** Before accounts, each browser kept its own log under the keys in §4.
-After sign-in, once the account's state has loaded, `ImportPrompt` reads those keys
-(`readLegacyData`). If they hold anything the account lacks, it offers to add it, naming what it
-would add:
+After sign-in, once the app has read the account from the server in this session (`sync.fresh`; a
+cached copy could be stale), `ImportPrompt` reads those keys (`readLegacyData`). If they hold
+anything the account lacks, it offers to add it, naming what it would add:
 
 - **Add to my account** sends it through `importFile`, the same server merge as a file import, so
   nothing in the account is replaced or deleted.
@@ -342,6 +344,13 @@ out leaves in place. If the account already holds everything the keys do (import
 device, say), the prompt records `imported` and never appears. Only an accent or daily pick in the
 settings key counts as data: every device still writes its theme there. The old keys are never
 changed, so a browser shared by two people offers its log to each until each answers.
+
+The single-list format (v1) needs trimming first. The old app copied its one list onto every
+logged week and onto the current week, so the screen looked as before. Imported into an account,
+that copy on the current week would replace the account's own carried-forward plan for this week
+and later ones, and an empty list would empty them. So the import puts the list only on the weeks
+it was ticked in (on the current week only if it was never ticked), adds no plan for an empty list,
+and reads a damaged v1 key as nothing rather than as the default exercises.
 
 **Accepted limits.**
 

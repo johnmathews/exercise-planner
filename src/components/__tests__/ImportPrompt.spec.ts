@@ -191,20 +191,49 @@ describe('the first-login import prompt', () => {
     expect(marker()).toBeNull()
   })
 
-  it('waits for the account’s data before asking', async () => {
+  it('waits for the server’s own state, not just the cache, then asks', async () => {
     recordBeforeAccounts()
-    api = signedIn()
-    localStorage.removeItem(CACHE_PREFIX + USER)
-    api.stall('GET', '/state')
+    api = signedIn() // with a cached copy, so the planner shows at once
+    const release = api.holdNext('GET', '/state')
     await mountApp()
+    expect(wrapper.find('[data-testid="exercise-grid"]').exists()).toBe(true)
     expect(prompt().exists()).toBe(false)
+    expect(marker()).toBeNull()
+    release()
+    await flushPromises()
+    expect(prompt().exists()).toBe(true)
   })
 
-  it('asks each user separately', async () => {
+  it('names a server failure as one', async () => {
     recordBeforeAccounts()
     api = signedIn()
-    localStorage.setItem(IMPORT_MARKER_PREFIX + 'bob', '"dismissed"')
     await mountApp()
+    api.failNext('POST', '/import', 500)
+    await button('Add to my account').trigger('click')
+    await flushPromises()
+    expect(prompt().get('[role="alert"]').text()).toBe(
+      'The server had a problem, so nothing was added. Try again in a while.',
+    )
+  })
+
+  it('asks each user on the same browser separately', async () => {
+    recordBeforeAccounts()
+    api = signedIn()
+    api.addUser('bob')
+    await mountApp()
+    await button('Not mine').trigger('click')
+    expect(marker()).toBe('"dismissed"')
+    // Alice signs out in another tab and bob signs in: he gets his own question.
+    localStorage.setItem('exercise-planner-session-v1', JSON.stringify({ user: 'bob' }))
+    api.signedIn = 'bob'
+    window.dispatchEvent(
+      new StorageEvent('storage', {
+        key: 'exercise-planner-session-v1',
+        storageArea: localStorage,
+      }),
+    )
+    await flushPromises()
     expect(prompt().exists()).toBe(true)
+    expect(marker('bob')).toBeNull()
   })
 })

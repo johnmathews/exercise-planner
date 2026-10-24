@@ -17,6 +17,12 @@ import {
  * remembers the answer, and "Later" asks again on the next load.
  */
 const props = defineProps<{ user: string }>()
+const ADD_FAILED: Record<'offline' | 'server' | 'auth' | 'error', string> = {
+  offline: 'Can’t reach the server, so nothing was added. Try again when you’re online.',
+  server: 'The server had a problem, so nothing was added. Try again in a while.',
+  auth: 'Your session has ended. Sign in again to add it.',
+  error: 'Something went wrong, so nothing was added. Try again later.',
+}
 const planner = usePlannerStore()
 const sync = useSyncStore()
 const summary = useImportSummary()
@@ -29,7 +35,8 @@ const problem = ref<string | null>(null)
 const added = ref(false)
 
 const data = computed(() =>
-  sync.loaded && !marker.value ? readLegacyData(planner.currentWeekKey) : null,
+  // Only against the account as the server holds it: a cached copy could be stale.
+  sync.fresh && !marker.value ? readLegacyData(planner.currentWeekKey) : null,
 )
 
 // Data already in the account (imported on another device, say) needs no question.
@@ -58,10 +65,7 @@ async function addToAccount(log: ExportData): Promise<void> {
     answer('imported')
     added.value = true
   } else {
-    problem.value =
-      outcome.code === 'offline'
-        ? 'Can’t reach the server, so nothing was added. Try again when you’re online.'
-        : 'Something went wrong, so nothing was added. Try again later.'
+    problem.value = ADD_FAILED[outcome.code]
   }
 }
 </script>

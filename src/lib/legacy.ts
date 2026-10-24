@@ -11,6 +11,7 @@ import {
   parsePlannerData,
   readKey,
   writeKey,
+  type TrackedData,
 } from '@/lib/storage'
 import type { ExportData } from '@/lib/transfer'
 
@@ -20,8 +21,18 @@ import type { ExportData } from '@/lib/transfer'
  * then (docs/architecture.md §4); they are never written or removed.
  */
 export function readLegacyData(currentWeek: string): ExportData | null {
-  const exercise = parsePlannerData(readKey(DATA_KEY), readKey(LEGACY_DATA_KEY), currentWeek)
-  const diet = parseDietData(readKey(DIET_KEY), readKey(LEGACY_DIET_KEY), currentWeek)
+  const exercise = fromV1Only(
+    DATA_KEY,
+    LEGACY_DATA_KEY,
+    currentWeek,
+    parsePlannerData(readKey(DATA_KEY), readKey(LEGACY_DATA_KEY), currentWeek),
+  )
+  const diet = fromV1Only(
+    DIET_KEY,
+    LEGACY_DIET_KEY,
+    currentWeek,
+    parseDietData(readKey(DIET_KEY), readKey(LEGACY_DIET_KEY), currentWeek),
+  )
   // The settings key also holds the theme, which every device still writes; only an accent or a
   // daily pick, saved before accounts, is the person's.
   const raw = parseJson(readKey(SETTINGS_KEY))
@@ -31,6 +42,30 @@ export function readLegacyData(currentWeek: string): ExportData | null {
     !Object.keys(t.plans).length && !Object.keys(t.log).length
   if (empty(exercise) && empty(diet) && !settings) return null
   return { exercise, diet, settings }
+}
+
+/**
+ * Trim what the single-list (v1) migration invents. Locally, the old app copied the one list
+ * onto every logged week and onto the current week, so the screen looked as before. Imported
+ * into an account, that copy on the current week would replace the account's own carried-forward
+ * plan for it and every later week, and an empty list would empty them. So: the list goes only on
+ * weeks it was ticked in, on the current week only if it was never ticked, and nowhere if empty.
+ * A damaged v1 key, which the parser reads as the default list, gives nothing.
+ */
+function fromV1Only<T>(
+  v2Key: string,
+  v1Key: string,
+  currentWeek: string,
+  data: TrackedData<T>,
+): TrackedData<T> {
+  if (isRecord(parseJson(readKey(v2Key))) || readKey(v1Key) === null) return data
+  const v1 = parseJson(readKey(v1Key))
+  const list = isRecord(v1) ? Object.values(v1).find(Array.isArray) : undefined
+  if (!list?.length) return { plans: {}, log: data.log }
+  const logged = Object.keys(data.log)
+  if (!logged.length) return data
+  const plans = Object.fromEntries(logged.map((week) => [week, data.plans[week]!]))
+  return { plans, log: data.log }
 }
 
 /**

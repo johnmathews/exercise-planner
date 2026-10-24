@@ -68,8 +68,8 @@ Tests sit in `__tests__/` next to the code they cover:
   cleaning, loading and resetting the shared exercise form.
 - `src/lib/__tests__/transfer.spec.ts`: every case in `fixtures/transfer/` (parsing an export and
   merging one), plus building an export, the merge summary and the download. Add a fixture rather
-  than an inline case when the behaviour is part of the export contract, since the API's tests will
-  read the same files.
+  than an inline case when the behaviour is part of the export contract: the API's tests
+  (`api/tests/test_parity.py`) read the same files.
 - `fixtures/transfer/sample/`: `storage.json` is a realistic `localStorage` snapshot. It spans five
   weeks (2026-09-21 to 2026-10-19): four with data, and 2026-09-28 left empty so it carries the
   plan before it forward. It has plans edited over time (sets, weights, Back extensions removed,
